@@ -1,0 +1,19 @@
+{
+  "name": "install-image",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prettier": "prettier --write ."
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "abort-controller": "^3.0.0",
+    "axios": "^1.5.0",
+    "cheerio-without-node-native": "^1.0.0-rc.2",
+    "node-fetch": "^3.3.2"
+  }
+}
