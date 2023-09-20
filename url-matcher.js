@@ -35,20 +35,25 @@ export function urlMatcher(url) {
       }
     }
     if (!content) return console.log('没有获取到任何内容')
-
+    // FIXME: 需要适配 parseFile 模式的链接
     if (downloadMode == 'downloadAllImages') {
-      // 匹配所有图片链接
+      // 方式一 匹配所有图片链接
       // const imageRegex = /(?<=(img[^>]*src="))[^"]*/g
       // const matchUrls = content.match(imageRegex)
 
-      // FIXME: 需要适配 parseFile 模式的链接
-      const imageRegex = /<img [^>]*src=['"](https?:\/\/[^'"]+\.(jpeg|jpg|gif|png|bmp|svg|webp|jpg_webp))['"][^>]*>/ig;
+      // 方式二 匹配所有图片链接
+      const imageRegex =
+        /<img [^>]*src=['"]((https?:\/\/)?[^'"]+\.(jpeg|jpg|gif|png|bmp|svg|webp|jpg_webp))['"][^>]*>/gi
       const matches = [...content.matchAll(imageRegex)]
-      const matchUrls = matches.map((match) => match[1])
+      let matchUrls = matches.map((match) => match[1])
 
-      console.log('matchUrls: ', matchUrls)
-      console.log('matchUrls: ', matchUrls.length)
-
+      const parsedInfo = parseImageUrl(targetCrawlingWebPageLink)
+      const { protocol, domain } = parsedInfo
+      matchUrls = matchUrls.map((url) => {
+        if (!url.includes('http')) {
+          return (url = `${protocol}//${domain}` + url)
+        }
+      })
       resolve(matchUrls)
     } else {
       const matchUrls = content.match(regex)
