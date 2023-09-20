@@ -7,9 +7,18 @@ import { AbortController } from 'abort-controller'
 // 链接匹配器
 import { urlMatcher } from './url-matcher.js'
 // 根据缩略图获取原图
-import { generateOriginalImageLink } from './generate-original-image-link.js'
+import { generateOriginalImageUrl } from './generate-original-image-url.js'
 // 配置文件中的变量
-import { downloadMode, retryInterval, thumbnailUrl, targetDownloadFolderPath } from './config.js'
+import {
+  downloadMode,
+  retryInterval,
+  thumbnailUrl,
+  targetDownloadFolderPath,
+  targetCrawlingWebPageLink,
+  maxConcurrentRequests,
+  maxIntervalMs,
+  minIntervalMs
+} from './config.js'
 
 // 辅助函数，从数组中获取随机项
 const sample = (array) => array[Math.floor(Math.random() * array.length)]
@@ -28,7 +37,7 @@ const headers = [
     'Sec-Fetch-User': '?1',
     'Upgrade-Insecure-Requests': '1',
     'User-Agent':
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36'
   },
   {
     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -39,8 +48,8 @@ const headers = [
     'Sec-Fetch-Site': 'none',
     'Sec-Fetch-User': '?1',
     'Upgrade-Insecure-Requests': '1',
-    'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:90.0) Gecko/20100101 Firefox/90.0',
-  },
+    'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:90.0) Gecko/20100101 Firefox/90.0'
+  }
 ]
 
 // 总照片数
@@ -65,18 +74,18 @@ urlMatcher(thumbnailUrl).then((thumbnailUrls) => {
   thumbnailUrls = Array.from(new Set(thumbnailUrls))
   switch (downloadMode) {
     case 'downloadAllImages':
-      installImages(thumbnailUrls, targetDownloadFolderPath)
+      installImages(thumbnailUrls, targetDownloadFolderPath, maxConcurrentRequests, maxIntervalMs, minIntervalMs)
       break
     case 'downloadSomeSpecificImages':
-      installImages(thumbnailUrls, targetDownloadFolderPath)
+      installImages(thumbnailUrls, targetDownloadFolderPath, maxConcurrentRequests, maxIntervalMs, minIntervalMs)
       break
     case 'downloadOriginImagesByThumbnails':
       const originalImageUrls = thumbnailUrls.map((item) => {
-        return generateOriginalImageLink(item)
+        return generateOriginalImageUrl(item)
       })
 
       console.log('originalImageUrls: ', originalImageUrls.length)
-      installImages(originalImageUrls, targetDownloadFolderPath)
+      installImages(originalImageUrls, targetDownloadFolderPath, maxConcurrentRequests, maxIntervalMs, minIntervalMs)
       break
   }
 })
@@ -85,35 +94,65 @@ urlMatcher(thumbnailUrl).then((thumbnailUrls) => {
  * 下载图片
  * @param {string} urls 图片链接集合
  * @param {string} targetDownloadFolderPath 目标下载文件夹路径
+ * @param {string} maxConcurrentRequests 最大并发请求数（每一轮）
+ * @param {string} maxIntervalMs 最大请求间隔时间（毫秒）
+ * @param {string} minIntervalMs 最小请求间隔时间（毫秒）
  */
-async function installImages(urls, targetDownloadFolderPath, maxIntervalMs = 500, minIntervalMs = 0) {
+async function installImages(
+  urls,
+  targetDownloadFolderPath,
+  maxConcurrentRequests = 30,
+  maxIntervalMs = 2000,
+  minIntervalMs = 200
+) {
   if (!fs.existsSync(targetDownloadFolderPath)) {
     console.log(`没有检测到"${targetDownloadFolderPath}"文件夹`)
     fs.mkdirSync(targetDownloadFolderPath, { recursive: true })
     console.log('文件夹创建成功')
   }
 
-  // 已请求过的图片链接集合
+  // 已发送请求的图片链接集合
   const requestedImageUrls = []
   // 总照片数(待处理的请求总数)
   imageCount = urls.length
-  for (const url of urls) {
-    const fileName = `IMG_${extractUrlFileNames(url)}`
-    /* 随机化请求间隔：为了更好地模拟真实用户的行为，在请求之间添加随机的时间间隔，
-    而不是固定的间隔。这可以减少模式化的请求，降低被识别为爬虫的概率。 */
-    await download('axios', fileName, url, {
-      responseType: 'arraybuffer',
-      timeout: 1000 * 10,
-      headers: sample(headers),
-    })
-    // 随机请求间隔（毫秒）
-    const randomInterval = Math.floor(Math.random() * (maxIntervalMs - minIntervalMs + 1) + minIntervalMs)
-    console.log('随机请求间隔: ', `${randomInterval}ms`)
-    // 设置请求间隔：在发送连续请求之间添加固定的时间间隔，以减缓请求的频率。
-    await new Promise((resolve) => setTimeout(resolve, randomInterval))
 
-    requestedImageUrls.push(url)
+  // 随机请求间隔（毫秒）
+  let randomInterval = 0
+  // 请求的开始时间（每一轮）
+  let startTime = 0
+  // 请求的结束时间（每一轮）
+  let endTime = 0
+  /* 随机化请求间隔：为了更好地模拟真实用户的行为，在请求之间添加随机的时间间隔，
+    而不是固定的间隔。这可以减少模式化的请求，降低被识别为爬虫的概率。 */
+  for (let i = 0; i < urls.length; i += maxConcurrentRequests) {
+    const batchUrls = urls.slice(i, i + maxConcurrentRequests)
+    const timeRemaining = randomInterval - (endTime - startTime)
+    if (timeRemaining > 0) {
+      randomInterval = timeRemaining
+      // 设置请求间隔：在发送连续请求之间添加固定的时间间隔，以减缓请求的频率。
+      await new Promise((resolve) => setTimeout(resolve, randomInterval))
+    }
+    // 请求的开始时间（每一轮）
+    startTime = Date.now() % 10000
+    await Promise.all(
+      batchUrls.map(async (url) => {
+        const fileName = `IMG_${extractUrlFileNames(url)}`
+
+        await download('axios', fileName, url, {
+          responseType: 'arraybuffer',
+          timeout: 1000 * 10,
+          headers: sample(headers)
+        })
+
+        requestedImageUrls.push(url)
+      })
+    )
+    // 请求的结束时间（每一轮）
+    endTime = Date.now() % 10000
+
+    randomInterval = Math.floor(Math.random() * (maxIntervalMs - minIntervalMs + 1) + minIntervalMs)
   }
+
   console.log('\x1b[32m%s\x1b[0m', `共发送了 ${requestedImageUrls.length} 次请求`)
 
   /**
@@ -161,7 +200,7 @@ async function installImages(urls, targetDownloadFolderPath, maxIntervalMs = 500
 
       // 错误请求处理器
       function errorHandler(error) {
-        reject()
+        resolve()
         requestFailedImages.push(url)
         // 请求失败 +1
         requestFailedCount++
@@ -264,9 +303,14 @@ function requestAgain() {
 
     const requestFailedImagesClone = JSON.parse(JSON.stringify(requestFailedImages))
     requestFailedImages = []
-    asynchronousRequestList = []
 
-    installImages(requestFailedImagesClone, targetDownloadFolderPath)
+    installImages(
+      requestFailedImagesClone,
+      targetDownloadFolderPath,
+      maxConcurrentRequests,
+      maxIntervalMs,
+      minIntervalMs
+    )
   }
 }
 
