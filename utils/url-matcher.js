@@ -2,7 +2,7 @@ import fs from 'fs'
 import axios from 'axios'
 import { generateRegex } from './generate-regex.js'
 import { parseImageUrl } from './parse-image-url.js'
-import { runningMode, downloadMode, targetCrawlingWebPageLink, targetReadFilePath } from './config.js'
+import { runningMode, downloadMode, targetCrawlingWebPageLink, targetReadFilePath } from '../config.js'
 
 /**
  * 链接匹配器
@@ -52,6 +52,8 @@ export function urlMatcher(url) {
       matchUrls = matchUrls.map((url) => {
         if (!url.includes('http')) {
           return (url = `${protocol}//${domain}` + url)
+        } else {
+          return url
         }
       })
       resolve(matchUrls)

@@ -4,17 +4,17 @@ import fetch from 'node-fetch'
 import path from 'path'
 import cheerio from 'cheerio-without-node-native'
 import { AbortController } from 'abort-controller'
+import { validateAndModifyFileName } from './utils/validate-and-modify-file-name.js'
 // 链接匹配器
-import { urlMatcher } from './url-matcher.js'
+import { urlMatcher } from './utils/url-matcher.js'
 // 根据缩略图获取原图
-import { generateOriginalImageUrl } from './generate-original-image-url.js'
+import { generateOriginalImageUrl } from './utils/generate-original-image-url.js'
 // 配置文件中的变量
 import {
   downloadMode,
   retryInterval,
   thumbnailUrl,
   targetDownloadFolderPath,
-  targetCrawlingWebPageLink,
   maxConcurrentRequests,
   maxIntervalMs,
   minIntervalMs
@@ -70,6 +70,8 @@ console.time('download time')
 
 // 匹配链接
 urlMatcher(thumbnailUrl).then((thumbnailUrls) => {
+  console.log('thumbnailUrls: ', thumbnailUrls)
+
   if (!thumbnailUrls) return
   thumbnailUrls = Array.from(new Set(thumbnailUrls))
   switch (downloadMode) {
@@ -136,7 +138,7 @@ async function installImages(
     startTime = Date.now() % 10000
     await Promise.all(
       batchUrls.map(async (url) => {
-        const fileName = `IMG_${extractUrlFileNames(url)}`
+        const fileName = validateAndModifyFileName(`IMG_${extractUrlFileNames(url)}`)
 
         await download('axios', fileName, url, {
           responseType: 'arraybuffer',

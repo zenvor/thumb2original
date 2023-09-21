@@ -25,7 +25,7 @@ export function generateOriginalImageUrl(thumbnailUrl) {
     // 将"/th/"替换为"/i/"
     return thumbnailUrl.replace('/th/', '/i/')
   } else if (thumbnailUrl.includes('https://boobsphoto.name')) {
-    const urlRegex = /https:\/\/boobsphoto\.name\/uploads\/posts\/.*\.jpg/g;
+    const urlRegex = /https:\/\/boobsphoto\.name\/uploads\/posts\/.*\.jpg/g
     const match = thumbnailUrl.match(urlRegex)
     return match[0]
   } else {
