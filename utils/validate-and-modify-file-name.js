@@ -1,6 +1,5 @@
 // 定义一个函数，接受一个文件名作为参数，返回一个符合Windows文件命名规则的文件名
 export function validateAndModifyFileName(fileName) {
-  console.log('fileName: ', fileName)
   // 定义一个正则表达式，匹配Windows文件命名规则中不允许的字符
   let invalidChars = /[\\/:*?\"<>|]/g
   // 定义一个数组，存储Windows文件命名规则中的保留字

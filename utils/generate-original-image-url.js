@@ -28,6 +28,13 @@ export function generateOriginalImageUrl(thumbnailUrl) {
     const urlRegex = /https:\/\/boobsphoto\.name\/uploads\/posts\/.*\.jpg/g
     const match = thumbnailUrl.match(urlRegex)
     return match[0]
+  } else if (thumbnailUrl.includes('https://c-ssl.dtstatic.com')) {
+    // 把缩略图链接中的`dtstatic.com`替换成`duitang.com`
+    let originalUrl = thumbnailUrl.replace('dtstatic.com', 'duitang.com')
+    // 去掉缩略图链接中的`.thumb.400_0`
+    originalUrl = thumbnailUrl.replace('.thumb.400_0', '')
+    // 返回原图链接
+    return originalUrl
   } else {
     // 如果是其他网站，返回原始链接
     return thumbnailUrl
