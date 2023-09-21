@@ -22,7 +22,7 @@ export function parseImageUrl(imageUrl) {
     return {
       protocol: protocol,
       domain: domain,
-      fileExtension: fileExtension,
+      fileExtension: fileExtension
     }
   } catch (error) {
     // 如果解析失败，返回错误信息
