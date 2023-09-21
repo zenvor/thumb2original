@@ -13,12 +13,18 @@ export function urlMatcher(url) {
   return new Promise(async (resolve) => {
     let regex
 
-    if (downloadMode != 'downloadAllImages') {
+    if (
+      (downloadMode == 'downloadSomeSpecificImages' && url) ||
+      (downloadMode == 'downloadOriginImagesByThumbnails' && url)
+    ) {
       const parsedInfo = parseImageUrl(url)
       const { protocol, domain, fileExtension } = parsedInfo
       console.log('协议: ' + protocol, '\n域名: ' + domain, '\n文件扩展名: ' + fileExtension)
       // 匹配特定的某些图片链接
       regex = generateRegex(protocol, domain, fileExtension)
+    } else if (downloadMode == 'downloadSomeSpecificImages' && !url) {
+      console.log('请配置缩略图链接`thumbnailUrl`')
+      return
     }
 
     // 文本数据，
@@ -36,7 +42,7 @@ export function urlMatcher(url) {
     }
     if (!content) return console.log('没有获取到任何内容')
     // FIXME: 需要适配 parseFile 模式的链接
-    if (downloadMode == 'downloadAllImages') {
+    if ((downloadMode == 'downloadAllImages' && !url) || (downloadMode == 'downloadOriginImagesByThumbnails' && !url)) {
       // 方式一 匹配所有图片链接
       // const imageRegex = /(?<=(img[^>]*src="))[^"]*/g
       // const matchUrls = content.match(imageRegex)
@@ -57,7 +63,10 @@ export function urlMatcher(url) {
         }
       })
       resolve(matchUrls)
-    } else {
+    } else if (
+      (downloadMode == 'downloadOriginImagesByThumbnails' && url) ||
+      (downloadMode == 'downloadSomeSpecificImages' && url)
+    ) {
       const matchUrls = content.match(regex)
       if (!matchUrls) return console.log('没有匹配到任何链接')
       resolve(matchUrls)
