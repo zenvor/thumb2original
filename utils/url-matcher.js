@@ -1,7 +1,7 @@
 import fs from 'fs'
 import axios from 'axios'
 import { generateRegex } from './generate-regex.js'
-import { parseImageUrl } from './parse-image-url.js'
+import { parseUrl } from './parse-url.js'
 import { runningMode, downloadMode, targetCrawlingWebPageLink, targetReadFilePath } from '../config.js'
 
 /**
@@ -17,7 +17,7 @@ export function urlMatcher(url) {
       (downloadMode == 'downloadSomeSpecificImages' && url) ||
       (downloadMode == 'downloadOriginImagesByThumbnails' && url)
     ) {
-      const parsedInfo = parseImageUrl(url)
+      const parsedInfo = parseUrl(url)
       const { protocol, domain, fileExtension } = parsedInfo
       console.log('协议: ' + protocol, '\n域名: ' + domain, '\n文件扩展名: ' + fileExtension)
       // 匹配特定的某些图片链接
@@ -49,27 +49,41 @@ export function urlMatcher(url) {
 
       // 方式二 匹配所有图片链接
       const imageRegex =
-        /<img [^>]*src=['"]((https?:\/\/)?[^'"]+\.(jpeg|jpg|gif|png|bmp|svg|webp|jpg_webp))['"][^>]*>/gi
+        // 这个正则表达式不匹配包含查询参数的链接
+        // /<img [^>]*src=['"]((https?:\/\/)?[^'"]+\.(jpeg|jpg|gif|png|bmp|svg|webp|jpg_webp|jpeg_webp))['"][^>]*>/gi
+        // 这个正则表达式将匹配包含查询参数的链接
+        // /<img [^>]*src=['"]((https?:\/\/)?[^'"]+\.(jpeg|jpg|gif|png|bmp|svg|webp|jpg_webp|jpeg_webp))(?:\?[^'"]*)?['"][^>]*>/gi
+
+        // 这个正则表达式将匹配纯文本中的图片链接，不再局限于 <img> 标签。它可以匹配包含图片链接的任何文本，并且仍然考虑了可能的查询参数部分
+        /(https?:\/\/[^'"\s]+?\.(jpeg|jpg|gif|png|bmp|svg|webp|jpg_webp|jpeg_webp))(?:\?[^\s'"]*)?/gi
+
       const matches = [...content.matchAll(imageRegex)]
       let matchUrls = matches.map((match) => match[1])
 
-      const parsedInfo = parseImageUrl(targetCrawlingWebPageLink)
-      const { protocol, domain } = parsedInfo
+      const { protocolAndDomain } = parseUrl(targetCrawlingWebPageLink)
       matchUrls = matchUrls.map((url) => {
         if (!url.includes('http')) {
-          return (url = `${protocol}//${domain}` + url)
+          return (url = `${protocolAndDomain}` + url)
         } else {
           return url
         }
       })
-      resolve(matchUrls)
+
+      matchCompleted(matchUrls)
     } else if (
       (downloadMode == 'downloadOriginImagesByThumbnails' && url) ||
       (downloadMode == 'downloadSomeSpecificImages' && url)
     ) {
       const matchUrls = content.match(regex)
-      if (!matchUrls) return console.log('没有匹配到任何链接')
-      resolve(matchUrls)
+      matchCompleted(matchUrls)
+    }
+
+    function matchCompleted(matchUrls) {
+      if (matchUrls.length) {
+        resolve(matchUrls)
+      } else {
+        console.log('没有匹配到链接')
+      }
     }
   })
 }

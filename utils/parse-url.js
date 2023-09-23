@@ -1,12 +1,12 @@
 /**
  * 解析图片链接
- * @param {string} imageUrl
+ * @param {string} webUrl
  * @returns
  */
-export function parseImageUrl(imageUrl) {
+export function parseUrl(webUrl) {
   try {
     // 使用URL对象来解析链接
-    const url = new URL(imageUrl)
+    const url = new URL(webUrl)
 
     // 获取协议、域名和路径
     const protocol = url.protocol
@@ -20,9 +20,10 @@ export function parseImageUrl(imageUrl) {
     const fileExtension = fileName.split('.').pop()
 
     return {
-      protocol: protocol,
-      domain: domain,
-      fileExtension: fileExtension
+      protocol,
+      domain,
+      fileExtension,
+      protocolAndDomain: `${protocol}//${domain}`
     }
   } catch (error) {
     // 如果解析失败，返回错误信息

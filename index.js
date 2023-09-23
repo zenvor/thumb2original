@@ -9,24 +9,30 @@ import { validateAndModifyFileName } from './utils/validate-and-modify-file-name
 import { urlMatcher } from './utils/url-matcher.js'
 // 根据缩略图获取原图
 import { generateOriginalImageUrl } from './utils/generate-original-image-url.js'
+// 解析页面url
+import { parseUrl } from './utils/parse-url.js'
+
 // 配置文件中的变量
 import {
   downloadMode,
   retryInterval,
+  retriesCount,
   thumbnailUrl,
+  targetCrawlingWebPageLink,
   targetDownloadFolderPath,
   maxConcurrentRequests,
   maxIntervalMs,
-  minIntervalMs
+  minIntervalMs,
 } from './config.js'
 
 // 辅助函数，从数组中获取随机项
 const sample = (array) => array[Math.floor(Math.random() * array.length)]
-
+const Referer = parseUrl(targetCrawlingWebPageLink)?.protocolAndDomain + '/'
 const headers = [
   {
     Accept:
       'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+    Referer,
     'Accept-Encoding': 'gzip, deflate, br',
     'Accept-Language': 'en-US,en;q=0.9',
     'Sec-Ch-Ua': '"Chromium";v="92", " Not A;Brand";v="99", "Google Chrome";v="92"',
@@ -37,10 +43,11 @@ const headers = [
     'Sec-Fetch-User': '?1',
     'Upgrade-Insecure-Requests': '1',
     'User-Agent':
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36'
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36',
   },
   {
     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    Referer,
     'Accept-Encoding': 'gzip, deflate, br',
     'Accept-Language': 'en-US,en;q=0.5',
     'Sec-Fetch-Dest': 'document',
@@ -48,10 +55,11 @@ const headers = [
     'Sec-Fetch-Site': 'none',
     'Sec-Fetch-User': '?1',
     'Upgrade-Insecure-Requests': '1',
-    'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:90.0) Gecko/20100101 Firefox/90.0'
-  }
+    'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:90.0) Gecko/20100101 Firefox/90.0',
+  },
 ]
-
+// 触发重试的次数
+let triggeringRetriesCount = 0
 // 总照片数
 let imageCount = 0
 // 下载成功的照片数量
@@ -73,6 +81,7 @@ urlMatcher(thumbnailUrl).then((thumbnailUrls) => {
   console.log('thumbnailUrls: ', thumbnailUrls)
 
   if (!thumbnailUrls) return
+
   thumbnailUrls = Array.from(new Set(thumbnailUrls))
   switch (downloadMode) {
     case 'downloadAllImages':
@@ -143,7 +152,7 @@ async function installImages(
         await download('axios', fileName, url, {
           responseType: 'arraybuffer',
           timeout: 1000 * 10,
-          headers: sample(headers)
+          headers: sample(headers),
         })
 
         requestedImageUrls.push(url)
@@ -203,14 +212,19 @@ async function installImages(
       // 错误请求处理器
       function errorHandler(error) {
         resolve()
-        requestFailedImages.push(url)
         // 请求失败 +1
         requestFailedCount++
         console.log('请求失败: ', requestFailedCount)
         // 下载失败 +1
         downloadFailedCount++
         console.log('请求失败/下载失败: ', downloadFailedCount)
-        console.log('errorStatus', error?.response?.status)
+        
+        if (!error) {
+          console.log('请求发送失败', url);
+        } else if (error.response?.status != 404) {
+          requestFailedImages.push(url)
+        }
+
         console.log('errorStatusText: ', error?.response?.statusText)
         console.log(`访问图片时发生错误：`, url)
         console.log('错误请求集合个数: ', requestFailedImages.length)
@@ -276,6 +290,9 @@ function finallyHandler() {
 
 // 重试机制： 重新下载请求失败的图片，可以确保爬虫能够处理请求失败的情况。
 function requestAgain() {
+  // 触发重试的次数达到上限
+  if (triggeringRetriesCount == retriesCount) return
+
   console.log('\x1b[36m%s\x1b[0m', `${retryInterval}秒后重新下载请求失败的照片`)
   let countdown = retryInterval
   const timer = setInterval(() => {
@@ -292,6 +309,8 @@ function requestAgain() {
 
   // 发送请求
   function request() {
+    // 触发重试
+    triggeringRetriesCount++
     // 请求成功的照片数量
     requestSuccessfullyCount = 0
     // 请求失败的照片数量
