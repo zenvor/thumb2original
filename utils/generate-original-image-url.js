@@ -32,7 +32,37 @@ export function generateOriginalImageUrl(thumbnailUrl) {
     // 把缩略图链接中的`dtstatic.com`替换成`duitang.com`
     let originalUrl = thumbnailUrl.replace('dtstatic.com', 'duitang.com')
     // 去掉缩略图链接中的`.thumb.400_0`
-    originalUrl = thumbnailUrl.replace('.thumb.400_0', '')
+    originalUrl = originalUrl.replace('.thumb.400_0', '')
+    // 返回原图链接
+    return originalUrl
+  } else if (thumbnailUrl.includes('https://thumbs2.imgbox.com')) {
+    // 把缩略图链接中的`thumbs2`替换成`images2`
+    let originalUrl = thumbnailUrl.replace('thumbs2', 'images2')
+    // 把缩略图链接中的`_t`替换成`_o`
+    originalUrl = originalUrl.replace('_t', '_o')
+    // 返回原图链接
+    return originalUrl
+  } else if (thumbnailUrl.includes('https://static-ca-cdn.eporner.com')) {
+    // 去掉缩略图链接中的`_296x1000`
+    let originalUrl = thumbnailUrl.replace('_296x1000', '')
+    // 返回原图链接
+    return originalUrl
+  } else if (thumbnailUrl.includes('userapi.com')) {
+    let originalUrl = thumbnailUrl
+    // 返回原图链接
+    return originalUrl
+  } else if (thumbnailUrl.includes('https://cdn.pichunter.com')) {
+    // 把缩略图链接中的`_i`替换成`_o`
+    let originalUrl = thumbnailUrl.replace('_i', '_o')
+    // 返回原图链接
+    return originalUrl
+  } else if (
+    thumbnailUrl.includes('https://cdn.elitebabes.com') ||
+    thumbnailUrl.includes('https://cdn.femjoyhunter.com') ||
+    thumbnailUrl.includes('https://cdn.pmatehunter.com')
+  ) {
+    // 去掉缩略图链接中的`_w800`
+    let originalUrl = thumbnailUrl.replace('_w400', '')
     // 返回原图链接
     return originalUrl
   } else {

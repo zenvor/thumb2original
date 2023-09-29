@@ -1,8 +1,11 @@
 import fs from 'fs'
 import axios from 'axios'
+import puppeteer from 'puppeteer'
+
 import { generateRegex } from './generate-regex.js'
 import { parseUrl } from './parse-url.js'
-import { runningMode, downloadMode, targetCrawlingWebPageLink, targetReadFilePath } from '../config.js'
+import { config } from '../config.js'
+let { runningMode, downloadMode, targetCrawlingWebPageLink, targetReadFilePath } = config
 
 /**
  * 链接匹配器
@@ -31,7 +34,7 @@ export function urlMatcher(url) {
     let content
     if (runningMode == 'parseWebPage') {
       // 获取网页内容
-      content = await getWebContent()
+      content = await getWebContent(targetCrawlingWebPageLink)
     } else if (runningMode == 'parseFile') {
       try {
         // 读取文件内容
@@ -89,16 +92,20 @@ export function urlMatcher(url) {
 }
 
 // 获取网页内容
-function getWebContent() {
-  return new Promise((resolve, reject) => {
-    axios
-      .get(targetCrawlingWebPageLink)
-      .then((response) => {
-        console.log('response: ', response)
-        resolve(response.data)
-      })
-      .catch((error) => {
-        return console.error('发生错误：', error)
-      })
+function getWebContent(link) {
+  return new Promise(async (resolve, reject) => {
+    // 启动一个新的浏览器实例
+    const browser = await puppeteer.launch({ headless: 'new' })
+    // 创建一个新的页面
+    const page = await browser.newPage()
+    try {
+      // 导航到您想要获取HTML的网址
+      await page.goto(link)
+      // 获取页面的HTML代码
+      const html = await page.content()
+      resolve(html)
+    } catch (error) {
+      return console.error('发生错误：', error)
+    }
   })
 }
