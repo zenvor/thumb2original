@@ -3,9 +3,9 @@ import axios from 'axios'
 import puppeteer from 'puppeteer'
 
 import { generateRegex } from './generate-regex.js'
-import { parseUrl } from './parse-url.js'
+import { parseLink } from './parse-link.js'
 import { config } from '../config.js'
-let { runningMode, downloadMode, targetCrawlingWebPageLink, targetReadFilePath } = config
+let { extractMode, downloadMode, targetCrawlingWebPageLink, targetReadFilePath } = config
 
 /**
  * 链接匹配器
@@ -20,7 +20,7 @@ export function urlMatcher(url) {
       (downloadMode == 'downloadSomeSpecificImages' && url) ||
       (downloadMode == 'downloadOriginImagesByThumbnails' && url)
     ) {
-      const parsedInfo = parseUrl(url)
+      const parsedInfo = parseLink(url)
       const { protocol, domain, fileExtension } = parsedInfo
       console.log('协议: ' + protocol, '\n域名: ' + domain, '\n文件扩展名: ' + fileExtension)
       // 匹配特定的某些图片链接
@@ -32,10 +32,10 @@ export function urlMatcher(url) {
 
     // 文本数据，
     let content
-    if (runningMode == 'parseWebPage') {
+    if (extractMode == 'parseWebPage') {
       // 获取网页内容
       content = await getWebContent(targetCrawlingWebPageLink)
-    } else if (runningMode == 'parseFile') {
+    } else if (extractMode == 'parseFile') {
       try {
         // 读取文件内容
         content = await fs.promises.readFile(targetReadFilePath, { encoding: 'utf-8' })
@@ -63,7 +63,7 @@ export function urlMatcher(url) {
       const matches = [...content.matchAll(imageRegex)]
       let matchUrls = matches.map((match) => match[1])
 
-      const { protocolAndDomain } = parseUrl(targetCrawlingWebPageLink)
+      const { protocolAndDomain } = parseLink(targetCrawlingWebPageLink)
       matchUrls = matchUrls.map((url) => {
         if (!url.includes('http')) {
           return (url = `${protocolAndDomain}` + url)
