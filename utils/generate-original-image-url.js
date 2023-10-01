@@ -65,8 +65,33 @@ export function generateOriginalImageUrl(thumbnailUrl) {
     let originalUrl = thumbnailUrl.replace('_w400', '')
     // 返回原图链接
     return originalUrl
+  } else if (thumbnailUrl.includes('http://i.girlsfordays.com')) {
+    // 去掉缩略图链接中的`/thumbnails`
+    let originalUrl = thumbnailUrl.replace('/thumbnails', '')
+    // 返回原图链接
+    return originalUrl
+  } else if (thumbnailUrl.includes('https://images.sexynude.pics')) {
+    // 去掉缩略图链接中的`/thumbs`
+    let originalUrl = thumbnailUrl.replace('/thumbs', '')
+    // 返回原图链接
+    return originalUrl
+  } else if (thumbnailUrl.includes('https://cdn.cherrynudes.com')) {
+    // 去掉缩略图链接中的`-410x410`
+    let originalUrl = thumbnailUrl.replace('-410x410', '')
+    // 返回原图链接
+    return originalUrl
+  } else if (thumbnailUrl.includes('https://thefapspot.com')) {
+    // 去掉缩略图链接中的`-150x150`
+    let originalUrl = thumbnailUrl.replace('-150x150', '')
+    // 返回原图链接
+    return originalUrl
+  } else if (thumbnailUrl.includes('https://cdni.sexynakedgirls.pics')) {
+    // 把缩略图链接中的`/460`替换成`/1280`
+    let originalUrl = thumbnailUrl.replace('/460', '/1280')
+    // 返回原图链接
+    return originalUrl
   } else {
     // 如果是其他网站，返回原始链接
-    return thumbnailUrl
+    return ''
   }
 }

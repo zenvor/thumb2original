@@ -1,12 +1,12 @@
 /**
- * 解析图片链接
- * @param {string} webUrl
+ * 解析链接
+ * @param {string} link
  * @returns
  */
-export function parseUrl(webUrl) {
+export function parseLink(link) {
   try {
     // 使用URL对象来解析链接
-    const url = new URL(webUrl)
+    const url = new URL(link)
 
     // 获取协议、域名和路径
     const protocol = url.protocol
