@@ -5,8 +5,11 @@ const config = {
   downloadMode: 'downloadOriginImagesByThumbnails',
   // 目标解析网站
   targetCrawlingWebPageLink: '',
-  targetCrawlingWebPageLinks: [],
-  // 下载的文件夹路径（不填默认根据网页标题创建文件夹，下载到download文件夹） 
+
+  targetCrawlingWebPageLinks: [
+    'https://chpic.su/en/stickers/Genshin_Impact_Official_Chibi/?nostat',
+  ],
+  // 下载的文件夹路径（不填默认根据网页标题创建文件夹，下载到download文件夹）
   downloadFolderPath: '',
   // 重试间隔(秒钟)-如果有下载失败的照片，服务会等待一段时间，然后重新下载请求失败的照片，默认 5 秒钟
   retryInterval: 5,
