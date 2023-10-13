@@ -26,8 +26,8 @@ export default class ImageExtractor {
     this.globalBrowser = null
     // 导航浏览器
     this.navigationBrowser = null
-     // resolve 函数
-     this.globalResolveHandler = null
+    // resolve 函数
+    this.globalResolveHandler = null
     // 网页标题
     this.title = ''
     // 当前访问的链接
@@ -238,6 +238,7 @@ export default class ImageExtractor {
       randomInterval = Math.floor(Math.random() * (this.maxIntervalMs - this.minIntervalMs + 1) + this.minIntervalMs)
     }
   }
+
   /**
    * @description 图片下载
    * @param {string} page
@@ -298,7 +299,9 @@ export default class ImageExtractor {
     })
   }
 
-  // 成功请求处理器
+  /**
+   * @description 成功请求处理器
+   */
   successHandler(imageBuffer, targetFilePath, imageUrl) {
     return new Promise(async (resolve) => {
       // 请求成功 +1
@@ -308,7 +311,9 @@ export default class ImageExtractor {
     })
   }
 
-  // 错误请求处理器
+  /**
+   * @description 错误请求处理器
+   */
   errorHandler(error, imageUrl) {
     return new Promise((resolve) => {
       // 请求失败 +1
@@ -360,7 +365,9 @@ export default class ImageExtractor {
     })
   }
 
-  // 判断是否已经处理完所有照片
+  /**
+   * @description 判断是否已经处理完所有照片
+   */
   async isFinished() {
     // 如果保存成功的数量 + 保存失败的数量 == 已请求图片的总数量，那就说明本次服务到此可以结束了
     if (this.downloadSuccessfullyCount + this.downloadFailedCount == this.imageCount) {
@@ -436,7 +443,9 @@ export default class ImageExtractor {
     }, 1000)
   }
 
-  // 发送请求
+  /**
+   * @description发送请求
+   */
   async request() {
     // 触发重试
     this.triggeringRetriesCount++
