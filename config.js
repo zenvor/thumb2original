@@ -1,16 +1,12 @@
 const config = {
   // 解析模式 'singleSite' 单个站点 | 'multipleSites' 多个站点
-  extractMode: 'multipleSites',
+  extractMode: 'singleSite',
   // 下载模式 'downloadAllImages' | 'downloadOriginImagesByThumbnails'
-  downloadMode: 'downloadOriginImagesByThumbnails',
+  downloadMode: 'downloadAllImages',
   // 目标解析网站
-  targetCrawlingWebPageLink: '',
-
-  targetCrawlingWebPageLinks: [
-    'https://chpic.su/en/stickers/Genshin_Impact_Official_Chibi/?nostat',
-  ],
-  // 下载的文件夹路径（不填默认根据网页标题创建文件夹，下载到download文件夹）
-  downloadFolderPath: '',
+  targetCrawlingWebPageLink: 'https://www.duitang.com/category/?cat=wallpaper',
+  // 多个目标解析网站
+  targetCrawlingWebPageLinks: [],
   // 重试间隔(秒钟)-如果有下载失败的照片，服务会等待一段时间，然后重新下载请求失败的照片，默认 5 秒钟
   retryInterval: 5,
   // 重试次数
@@ -21,8 +17,8 @@ const config = {
   maxIntervalMs: 5000,
   // 最小请求间隔时间（毫秒）
   minIntervalMs: 500,
-  // 目标读取文件路径
-  targetReadFilePath: '',
+  // 下载的文件夹路径（不填默认根据网页标题创建文件夹，下载到download文件夹）
+  downloadFolderPath: '',
 }
 
 export { config }

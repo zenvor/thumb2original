@@ -24,10 +24,6 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     // 对于网站 "https://i8.vipr.im"
     // 将"/th/"替换为"/i/"
     return thumbnailUrl.replace('/th/', '/i/')
-  } else if (thumbnailUrl.includes('https://boobsphoto.name')) {
-    const urlRegex = /https:\/\/boobsphoto\.name\/uploads\/posts\/.*\.jpg/g
-    const match = thumbnailUrl.match(urlRegex)
-    return match[0]
   } else if (thumbnailUrl.includes('https://c-ssl.dtstatic.com')) {
     // 把缩略图链接中的`dtstatic.com`替换成`duitang.com`
     let originalUrl = thumbnailUrl.replace('dtstatic.com', 'duitang.com')
@@ -148,14 +144,13 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     let fileName = thumbnailUrl.substring(slashStringIndex)
     let underlinedIndex = fileName.lastIndexOf('_')
     fileName = fileName.substring(0, underlinedIndex) + fileName.substring(underlinedIndex).replace('_', '@@')
-    console.log('fileName: ', fileName);
+    console.log('fileName: ', fileName)
     fileName = fileName.replace(/\/.*?@@/, '/')
     thumbnailUrl = path + fileName
     // 把缩略图链接中的`/_data`替换成`/save2/ru`
     let originalUrl = thumbnailUrl.replace(/\/_data\b/, '/save2/ru')
     // 使用正则表达式替换
     originalUrl = originalUrl.replace(/\/stickers\/[a-z]\//i, '/stickers/')
-    debugger
     // 使用正则表达式替换
     originalUrl = originalUrl.replace(/\.webp[^/]*/, `/f=webp_c=png_bg=${type}`)
     // originalUrl = originalUrl.replace(/\.webp[^/]*/, '/f=webp_c=png_bg=white')
