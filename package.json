@@ -1,11 +1,11 @@
 {
-  "name": "install-image",
+  "name": "web-crawler-nodejs",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node ./index.js"
+    "serve": "node ./index.js"
   },
   "author": "",
   "license": "ISC",
