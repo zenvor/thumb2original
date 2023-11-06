@@ -53,14 +53,20 @@ export default class ImageExtractor {
   }
 
   async start() {
+    // 启动一个全局浏览器实例
+    this.globalBrowser = await puppeteer.launch({ headless: false, timeout: 300 * 1000 })
+    // 启动一个新的浏览器实例
+    this.navigationBrowser = await puppeteer.launch({ headless: false, timeout: 300 * 1000 })
+
     switch (this.extractMode) {
       case 'singleSite':
         console.log('\x1b[36m%s\x1b[0m', '开始计时')
         console.time('download time')
-        // 启动一个全局浏览器实例
-        this.globalBrowser = await puppeteer.launch({ headless: 'new' })
 
-        await this.extractImages(this.targetCrawlingWebPageLink)
+        await this.extractImages(this.navigationBrowser, this.targetCrawlingWebPageLink)
+        // 关闭浏览器
+        this.globalBrowser.close()
+        this.navigationBrowser.close()
         console.log('this.targetCrawlingWebPageLink: ', this.targetCrawlingWebPageLink)
         break
       case 'multipleSites':
@@ -68,13 +74,14 @@ export default class ImageExtractor {
           if (link) {
             console.log('\x1b[36m%s\x1b[0m', '开始计时')
             console.time('download time')
-            // 启动一个全局浏览器实例
-            this.globalBrowser = await puppeteer.launch({ headless: 'new' })
 
-            await this.extractImages(link)
+            await this.extractImages(this.navigationBrowser, link)
             console.log('link: ', link)
           }
         }
+        // 关闭浏览器
+        this.globalBrowser.close()
+        this.navigationBrowser.close()
         break
     }
   }
@@ -83,47 +90,267 @@ export default class ImageExtractor {
    * @description 图片提取
    * @param {string} link
    */
-  extractImages(link) {
+  extractImages(navigationBrowser, link) {
     console.log('link: ', link)
     return new Promise(async (resolve) => {
       this.globalResolveHandler = resolve
       this.currentLink = link
-      // 启动一个新的浏览器实例
-      this.navigationBrowser = await puppeteer.launch({ headless: false })
       // 创建一个新的页面
-      const page = await this.navigationBrowser.newPage()
-      // 设置视口大小为1600px宽，5000px高
-      await page.setViewport({ width: 1600, height: 50000 })
+      const page = await navigationBrowser.newPage()
+      // 设置视口大小
+      await page.setViewport({ width: 1800, height: 1000 })
       // 配置导航超时
-      await page.setDefaultNavigationTimeout(300 * 1000)
+      // 设置访问图片的超时时间为 300 秒
+      const timeoutMilliseconds = 1000 * 300
       // 导航到您想要获取HTML的网址 ['load', 'domcontentloaded', 'networkidle0', 'networkidle2']
-      await page.goto(link, { waitUntil: 'domcontentloaded' })
-      // 模拟滚动页面
-      await page.evaluate(() => window.scrollBy(0, 1000))
-      // 等待确保页面加载完成
-      await page.waitForSelector('body')
+      await page.goto(link, { waitUntil: 'networkidle0', timeout: timeoutMilliseconds })
+
+      // 等待一段时间
+      await new Promise((resolve) => setTimeout(resolve, 60000))
+
+      await page.evaluate(async (link) => {
+        // 异步滚动函数，接受两个参数：最大已滚动距离和回调函数
+        // async function autoScroll(maxScroll, callback) {
+        //   return new Promise((resolve, reject) => {
+        //     let lastScrollTime = Date.now() // 记录最后一次滚动的时间
+        //     // 获取当前页面的高度
+        //     let pageHeight = document.documentElement.scrollHeight
+        //     // 获取当前已滚动的距离
+        //     let currentScroll = window.scrollY
+        //     // 设置一个标志，表示是否到达页面底部
+        //     let isBottom = false
+        //     // 设置一个标志，表示是否停止滚动
+        //     let isStop = false
+        //     // 设置一个计时器，用于检测滚动停留时间
+        //     let timer = null
+        //     // 定义一个内部函数，用于执行滚动操作
+        //     function scroll() {
+        //       // 如果已经到达页面底部或者超过最大已滚动距离或者停止滚动，就停止滚动，并执行回调函数
+        //       if (isBottom || currentScroll >= maxScroll || isStop) {
+        //         clearInterval(timer)
+        //         callback()
+        //         resolve()
+        //         return
+        //       }
+        //       // 每次滚动一定的像素
+        //       window.scrollBy(0, 200)
+        //       // 更新已滚动的距离
+        //       currentScroll = window.scrollY
+        //       // 检测是否到达页面底部
+        //       if (currentScroll + window.innerHeight >= pageHeight) {
+        //         // 如果是第一次到达页面底部，就设置一个定时器，等待2秒
+        //         if (!isBottom) {
+        //           isBottom = true
+        //           timer = setTimeout(scroll, 2000)
+        //         }
+        //       } else {
+        //         // 如果不是到达页面底部，就清除定时器，并继续滚动
+        //         isBottom = false
+        //         clearTimeout(timer)
+        //         timer = setTimeout(scroll, 100)
+        //       }
+        //       // 检测是否停止滚动
+        //       if (Date.now() - lastScrollTime > 1000) {
+        //         // 如果超过1000ms没有滚动，就设置停止标志为真
+        //         isStop = true
+        //       } else {
+        //         // 如果还在滚动，就更新最后一次滚动的时间，并设置停止标志为假
+        //         lastScrollTime = Date.now()
+        //         isStop = false
+        //       }
+        //     }
+        //     // 调用内部函数开始滚动
+        //     scroll()
+        //   })
+        // }
+
+        // 异步滚动函数，接受两个参数：最大已滚动距离和回调函数
+        async function autoScroll(maxScroll) {
+          return new Promise((resolve) => {
+            let lastScrollTime = Date.now() // 记录最后一次滚动的时间
+            window.onscroll = () => {
+              // 监听滚动事件
+              lastScrollTime = Date.now() // 更新最后一次滚动的时间
+              // 如果还在滚动，就更新最后一次滚动的时间，并设置停止标志为假
+              isStop = false
+            }
+            // 获取当前已滚动的距离
+            let currentScroll = window.scrollY
+            // 设置一个标志，表示是否停止滚动
+            let isStop = false
+            // 设置一个计时器，用于检测滚动停留时间
+            let timer = null
+            // 定义一个内部函数，用于执行滚动操作
+            async function scroll() {
+              if (link.includes('https://www.pornpics.com')) {
+                const element = document.querySelector('div.gallery-info.to-gall-info') // 使用选择器找到元素
+                if (element !== null) {
+                  console.log('元素已加载')
+                  clearInterval(timer)
+                  console.log('自动滚动完成！')
+                  resolve()
+                  return
+                }
+              }
+
+              // 如果超过最大已滚动距离或者停止滚动，就停止滚动，并执行回调函数
+              if (currentScroll >= maxScroll || isStop) {
+                clearInterval(timer)
+                console.log('自动滚动完成！')
+                resolve()
+                return
+              }
+              // 每次滚动一定的像素
+              window.scrollBy(0, 300)
+              // 更新已滚动的距离
+              currentScroll = window.scrollY
+              // 检测是否停止滚动
+              if (Date.now() - lastScrollTime > 1000) {
+                // 如果超过 1000ms 没有滚动，就设置停止标志为真
+                isStop = true
+              }
+              // 设置一个定时器，继续滚动
+              timer = setTimeout(scroll, 100)
+            }
+            // 调用内部函数开始滚动
+            scroll()
+          })
+        }
+
+        // 调用异步函数，传入最大已滚动距离为20000像素，回调函数为打印一条消息
+        await autoScroll(100000)
+      }, link)
+
+      // 滚动到底部
+      async function scrollToEnd(page) {
+        return await page.evaluate(async () => {
+          return new Promise((resolve) => {
+            let lastScrollTime = Date.now() // 记录最后一次滚动的时间
+            window.onscroll = () => {
+              // 监听滚动事件
+              lastScrollTime = Date.now() // 更新最后一次滚动的时间
+            }
+            let timerId = setInterval(() => {
+              // 定时检查是否停止滚动
+              if (Date.now() - lastScrollTime > 1000) {
+                // 如果超过1000ms没有滚动
+                clearInterval(timerId) // 清除定时器
+                resolve() // 结束Promise
+              } else {
+                // 如果还在滚动
+                window.scrollBy(0, 500) // 滚动一段距离
+              }
+            }, 100)
+          })
+        })
+      }
 
       // 获取页面标题
       this.title = await page.title()
-      console.log('title: ', this.title)
 
       this.downloadFolderPath
         ? (this.targetDownloadFolderPath = this.downloadFolderPath)
         : (this.targetDownloadFolderPath = `./download/${validateAndModifyFileName(`${this.title}`)}`)
 
       const { protocolAndDomain } = parseLink(link)
-      this.images = await page.evaluate((protocolAndDomain) => {
-        const elements = Array.from(document.querySelectorAll('img'))
 
-        return elements.map((element) => {
-          let url = element.getAttribute('src')
-          if (url && !url.includes('http')) {
+      this.images = await page.evaluate((protocolAndDomain) => {
+        const elements = Array.from(document.querySelectorAll('a, img, svg, meta')) // 获取所有的 a 和 img 元素
+
+        return elements
+          .map((element) => {
+            if (element.tagName === 'A') {
+              const url = element.getAttribute('href')
+              if (isImageLink(url)) return handleImageLink(url, protocolAndDomain)
+              return null
+            } else if (element.tagName === 'IMG') {
+              let url = element.getAttribute('src')
+              if (url) return handleImageLink(url, protocolAndDomain)
+              return null
+            } else if (element.tagName === 'svg') {
+              const svgContent = new XMLSerializer().serializeToString(element)
+              // 编码后的SVG内容
+              const encodedSvgContent = encodeURIComponent(svgContent)
+              console.log('encodedSvgContent: ', encodedSvgContent)
+              return `data:image/svg+xml,${encodedSvgContent}`
+            } else if (element.tagName === 'META') {
+              const content = element.getAttribute('content')
+              if (isImageLink(content)) return handleImageLink(content, protocolAndDomain)
+              return null
+            }
+            return null // 返回 null 表示不是图片链接
+          })
+          .filter((link) => link !== null)
+          .concat(extractImagesFromCssStyles())
+
+        function extractImagesFromCssStyles() {
+          const elements = document.querySelectorAll('[class]')
+          const images = []
+
+          // 遍历每个元素
+          for (let element of elements) {
+            const style = window.getComputedStyle(element)
+
+            const backgroundImage = style.getPropertyValue('background-image')
+
+            const svg = style.getPropertyValue('--svg')
+
+            if (svg && (svg.startsWith('url("data:') || svg.startsWith('url("http'))) {
+              images.push(extractImageLinkFromCssPropertyValue(svg))
+            } else if (
+              backgroundImage &&
+              (backgroundImage.startsWith('url("data:') || backgroundImage.startsWith('url("http'))
+            ) {
+              images.push(extractImageLinkFromCssPropertyValue(backgroundImage))
+            }
+          }
+
+          function extractImageLinkFromCssPropertyValue(cssPropertyValue) {
+            if (cssPropertyValue.startsWith('url("data:')) {
+              // 如果背景图像属性是一个data URL
+              // 提取data URL中的图像数据
+              const imageData = cssPropertyValue.slice(5, -2)
+              const svgUrl = decodeURIComponent(imageData)
+              return svgUrl
+            } else if (cssPropertyValue.startsWith('url("http')) {
+              // 如果背景图像属性是一个有效的链接
+              // 提取链接中的图像地址
+              const imageUrl = cssPropertyValue.slice(5, -2)
+              return imageUrl
+            }
+          }
+
+          // 返回包含图像数据的数组
+          return images
+        }
+
+        function handleImageLink(url, protocolAndDomain) {
+          url = url.replace(/_webp$/, '')
+          if (protocolAndDomain.includes('http://asiantgp.net')) {
+            const prefix = 'http://asiantgp.net/gallery/Japanese_cute_young_wife_Haruka'
+            return prefix + '/' + url
+          } else if (!url.startsWith('http')) {
             return (url = `${protocolAndDomain}` + url)
           } else {
             return url
           }
-        })
+        }
+
+        /**
+         * 是否为图像链接
+         * @param {string} url
+         * @returns
+         */
+        function isImageLink(url) {
+          // 定义一个正则表达式，匹配以常见图片文件扩展名结尾的字符串
+          let regex = /(https?:\/\/).*\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff)$/i // 使用不区分大小写的标志 'i'
+          // 调用test()方法，检查url是否符合正则表达式
+          return regex.test(url)
+        }
       }, protocolAndDomain)
+
+      // 使用 Set 去重
+      this.images = [...new Set(this.images)]
 
       console.log('this.images: ', this.images)
       console.log('this.images: ', this.images?.length)
@@ -146,7 +373,27 @@ export default class ImageExtractor {
 
               return dataSrcValues
             })
-          } else if (link.includes('https://chpic.su')) {
+          } else if (link.includes('http://www.alsasianporn.com')) {
+            originalImageUrls = await page.evaluate(() => {
+              const as = Array.from(document.querySelectorAll('a[data-fancybox="gallery"]')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
+
+              // 使用 Array.map 方法获取每个 <span> 元素的 data-src 属性的值
+              const hrefValues = as.map((span) => span.getAttribute('href'))
+
+              return hrefValues
+            })
+          }
+          else if (link.includes('https://www.japanesesexpic.me') || link.includes('http://www.asianpussypic.me')) {
+            originalImageUrls = await page.evaluate(() => {
+              const as = Array.from(document.querySelectorAll('a[target="_blank"]')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
+
+              // 使用 Array.map 方法获取每个 <span> 元素的 data-src 属性的值
+              const hrefValues = as.map((span) => span.getAttribute('href'))
+
+              return hrefValues
+            })
+          }
+          else if (link.includes('https://chpic.su')) {
             originalImageUrls = this.images
               .map((imageUrl) => generateOriginalImageUrl(imageUrl, 'transparent'))
               .filter((imageUrl) => imageUrl !== '')
@@ -162,13 +409,44 @@ export default class ImageExtractor {
           }
 
           console.log('originalImageUrls: ', originalImageUrls)
+
+          originalImageUrls = originalImageUrls.map(url => {
+            if (isImageLink(url)) return handleImageLink(url, protocolAndDomain)
+            return null
+          }).filter((link) => link !== null)
+
           if (!originalImageUrls.length) {
+            resolve()
             return console.log('没有匹配到原图')
           }
 
           this.installImages(link, originalImageUrls)
 
           break
+      }
+
+      function handleImageLink(url, protocolAndDomain) {
+        url = url.replace(/_webp$/, '')
+        if (protocolAndDomain.includes('http://asiantgp.net')) {
+          const prefix = 'http://asiantgp.net/gallery/Japanese_cute_young_wife_Haruka'
+          return prefix + '/' + url
+        } else if (!url.startsWith('http')) {
+          return (url = `${protocolAndDomain}` + url)
+        } else {
+          return url
+        }
+      }
+
+      /**
+       * 是否为图像链接
+       * @param {string} url
+       * @returns
+       */
+      function isImageLink(url) {
+        // 定义一个正则表达式，匹配以常见图片文件扩展名结尾的字符串
+        let regex = /(https?:\/\/).*\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff)$/i // 使用不区分大小写的标志 'i'
+        // 调用test()方法，检查url是否符合正则表达式
+        return regex.test(url)
       }
     })
   }
@@ -219,9 +497,13 @@ export default class ImageExtractor {
             // Referer: link,
           })
           //  生成文件名
-          const fileName = this.addExtension(
-            validateAndModifyFileName(`IMG_${requestedImageUrls.length + 1}_${this.extractUrlFileNames(imageUrl)}`)
-          )
+          // const fileName = this.addExtension(
+          //   validateAndModifyFileName(
+          //     `IMG_${requestedImageUrls.length + 1}_${this.extractImageNameAndFileName(imageUrl).fileName}`
+          //   )
+          // )
+
+          const fileName = validateAndModifyFileName(this.extractImageNameAndFileName(imageUrl).fileName)
 
           requestedImageUrls.push(imageUrl)
 
@@ -251,8 +533,8 @@ export default class ImageExtractor {
       // 构造目标文件的完整路径
       const targetFilePath = path.join(this.targetDownloadFolderPath, fileName)
 
-      // 设置访问图片的超时时间为 60 秒
-      const timeoutMilliseconds = 1000 * 60
+      // 设置访问图片的超时时间为 180 秒
+      const timeoutMilliseconds = 1000 * 5000
 
       // 使用 page.goto 导航到图片的URL
       try {
@@ -395,9 +677,6 @@ export default class ImageExtractor {
         console.log('this.requestFailedImages: ', this.requestFailedImages)
         this.requestAgain()
       } else {
-        // 关闭浏览器
-        this.globalBrowser.close()
-        this.navigationBrowser.close()
         // 触发重试的次数
         this.triggeringRetriesCount = 0
         // 总照片数
@@ -426,7 +705,7 @@ export default class ImageExtractor {
    */
   requestAgain() {
     // 触发重试的次数达到上限
-    if (this.triggeringRetriesCount == this.retriesCount) return
+    if (this.triggeringRetriesCount == this.retriesCount) return this.globalResolveHandler()
 
     console.log('\x1b[36m%s\x1b[0m', `${this.retryInterval}秒后重新下载请求失败的照片`)
     let countdown = this.retryInterval
@@ -444,7 +723,7 @@ export default class ImageExtractor {
   }
 
   /**
-   * @description发送请求
+   * @description 发送请求
    */
   async request() {
     // 触发重试
@@ -471,39 +750,113 @@ export default class ImageExtractor {
   }
 
   /**
-   * 提取链接中的文件名
+   * 提取链接中的图片名和文件名
    * @param {string} url
    * @returns
    */
-  extractUrlFileNames(url) {
-    if (url) {
-      try {
-        const slashString = url.lastIndexOf('/') || 0
-        let fileName = url.substring(slashString + 1)
-        if (fileName.includes('?')) fileName = fileName.split('?')[0]
-        return fileName
-      } catch (error) {
-        console.log('url', url)
-        console.log('提取链接中的文件名 Error', error)
+  extractImageNameAndFileName(imageUrl) {
+    if (isDataUrl(imageUrl)) {
+      return getFileNameFromDataUrl(imageUrl)
+    } else {
+      return getImageNameAndFileName(imageUrl)
+    }
+
+    function isDataUrl(url) {
+      // 检查链接是否以"data:"开头
+      if (url.startsWith('data:')) {
+        // 如果是，返回true
+        return true
+      } else {
+        // 如果不是，返回false
+        return false
       }
     }
-  }
 
-  /**
-   * @description 判断文件名是否有包含文件扩展名，如果没有默认加上.png
-   * @param {*} filename
-   * @returns
-   */
-  addExtension(filename) {
-    // 定义一个函数，接受一个文件名作为参数
-    let ext = '.png' // 定义一个变量，存储默认的文件扩展名
-    let re = /\.\w+$/ // 定义一个正则表达式，匹配以.开头的任意字母或数字结尾的部分
-    if (re.test(filename)) {
-      // 如果文件名匹配正则表达式，说明已经有文件扩展名
-      return filename // 直接返回文件名
-    } else {
-      // 否则，说明没有文件扩展名
-      return filename + ext // 在文件名后面加上默认的文件扩展名，并返回
+    /**
+     * 是否为图像链接
+     * @param {string} url
+     * @returns
+     */
+    function isImageLink(url) {
+      // 定义一个正则表达式，匹配以常见图片文件扩展名结尾的字符串
+      let regex = /(https?:\/\/).*\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff)$/i // 使用不区分大小写的标志 'i'
+      // 调用test()方法，检查url是否符合正则表达式
+      return regex.test(url)
+    }
+
+    function getImageNameAndFileName(imageUrl) {
+      // 用"/"分割图片链接，得到一个数组
+      let parts = imageUrl.split('/')
+      // 取数组的最后一个元素，即文件名字
+      let fileName = parts[parts.length - 1]
+      if (fileName.includes('?')) fileName = fileName.split('?')[0]
+
+      fileName = addExtension(fileName)
+
+      // 用"."分割文件名字，得到一个数组
+      let subparts = fileName.split('.')
+      // 取数组的第一个元素，即图片名字
+      let imageName = subparts[0]
+      // 返回一个对象，包含图片名字和文件名字
+      return {
+        imageName: imageName,
+        fileName: fileName,
+      }
+    }
+
+    function getFileNameFromDataUrl(imageUrl, id) {
+      // 用","分割图片链接，得到一个数组
+      let parts = imageUrl.split(',')
+      // 取数组的第一个元素，即数据URI的前缀
+      let prefix = parts[0]
+      // 用";"分割前缀，得到一个数组
+      let subparts = prefix.split(';')
+      // 取数组的第一个元素，即MIME类型
+      let mimeType = subparts[0]
+      // 去掉"data:"前缀
+      mimeType = mimeType.slice(5)
+      // 根据MIME类型来判断文件的扩展名
+      let extension = ''
+      switch (mimeType) {
+        case 'image/svg+xml':
+          extension = '.svg'
+          break
+        case 'image/png':
+          extension = '.png'
+          break
+        case 'image/jpeg':
+          extension = '.jpg'
+          break
+        // 其他类型可以自行添加
+        default:
+          extension = '.unknown'
+      }
+
+      let imageName = id
+      let fileName = id + extension
+      // 返回文件名字
+      return {
+        imageName,
+        fileName,
+      }
+    }
+
+    /**
+     * @description 判断文件名是否有包含文件扩展名，如果没有默认加上.png
+     * @param {*} filename
+     * @returns
+     */
+    function addExtension(filename) {
+      // 定义一个函数，接受一个文件名作为参数
+      let ext = '.png' // 定义一个变量，存储默认的文件扩展名
+      let re = /\.\w+$/ // 定义一个正则表达式，匹配以.开头的任意字母或数字结尾的部分
+      if (re.test(filename)) {
+        // 如果文件名匹配正则表达式，说明已经有文件扩展名
+        return filename // 直接返回文件名
+      } else {
+        // 否则，说明没有文件扩展名
+        return filename + ext // 在文件名后面加上默认的文件扩展名，并返回
+      }
     }
   }
 }
