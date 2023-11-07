@@ -17,10 +17,9 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     return originalUrl
   } else if (thumbnailUrl.includes('imx.to')) {
     // 将"/t/"替换为"/i/"
-    // if (!thumbnailUrl.includes('/t/')) return ''
-    if (!thumbnailUrl.includes('/t/2018/09/09/')) return ''
+    if (!thumbnailUrl.includes('/t/')) return ''
     return thumbnailUrl.replace('/t/', '/i/')
-  } else if (thumbnailUrl.includes('https://i8.vipr.im')) {
+  } else if (thumbnailUrl.includes('i8.vipr.im')) {
     if (!thumbnailUrl.includes('/th/')) return ''
     // 将"/th/"替换为"/i/"
     let originalUrl = thumbnailUrl.replace('/th/', '/i/')
@@ -172,41 +171,21 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     let originalUrl = thumbnailUrl.replace('/460/', '/1280/')
     // 返回原图链接
     return originalUrl
-  } else if (thumbnailUrl.includes('http://asian-xxx.xyz') || thumbnailUrl.includes('http://tightasianpussy.xyz')) {
-    if (!thumbnailUrl.includes('th_')) return ''
-    let originalUrl = thumbnailUrl.replace('th_', '')
-    // 返回原图链接
-    return 'http://asian-xxx.xyz/xxx-asia/3a837a/' + originalUrl
-  } else if (thumbnailUrl.includes('http://tightasianpussy.xyz')) {
-    if (!thumbnailUrl.includes('th_')) return ''
-    let originalUrl = thumbnailUrl.replace('th_', '')
-    // 返回原图链接
-    return 'http://tightasianpussy.xyz/asian-pussy/6a68b9/' + originalUrl
   } else if (thumbnailUrl.includes('http://asiantgp.net')) {
     if (!thumbnailUrl.includes('tn_')) return ''
     let originalUrl = thumbnailUrl.replace('tn_', '')
     // 返回原图链接
     return originalUrl
-  } else if (thumbnailUrl.includes('http://indian-porn-pics.com')) {
-    if (!thumbnailUrl.includes('/tn_')) return ''
-    let originalUrl = thumbnailUrl.replace('/tn_', '')
-    return 'http://indian-porn-pics.com/gallery/japanese_amateur_outdoor_1186' + originalUrl
   } 
-  else if (thumbnailUrl.includes('https://i6.vipr.im')) {
-    if (!thumbnailUrl.includes('/th')) return ''
-    let originalUrl = thumbnailUrl.replace('/th', '/i')
-    return originalUrl
-  } 
-
   else if (thumbnailUrl.includes('https://www.sigmapic.com')) {
     if (!thumbnailUrl.includes('/7_t')) return ''
     let originalUrl = thumbnailUrl.replace('/7_t', '/7_553')
     return originalUrl
   } 
-  else if (thumbnailUrl.includes('https://t34.pixhost.to')) {
+  else if (thumbnailUrl.includes('pixhost.to')) {
     if (!thumbnailUrl.includes('/thumbs')) return ''
     let originalUrl = thumbnailUrl.replace('/thumbs', '/images')
-    originalUrl = thumbnailUrl.replace('t34.pixhost.to', 'mg34.pixhost.to')
+    originalUrl = thumbnailUrl.replace('//t', '//img')
     return originalUrl
   } 
   else {
