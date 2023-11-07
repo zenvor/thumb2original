@@ -103,10 +103,10 @@ export default class ImageExtractor {
       // 设置访问图片的超时时间为 300 秒
       const timeoutMilliseconds = 1000 * 300
       // 导航到您想要获取HTML的网址 ['load', 'domcontentloaded', 'networkidle0', 'networkidle2']
-      await page.goto(link, { waitUntil: 'networkidle0', timeout: timeoutMilliseconds })
+      await page.goto(link, { waitUntil: 'domcontentloaded', timeout: timeoutMilliseconds })
 
       // 等待一段时间
-      await new Promise((resolve) => setTimeout(resolve, 60000))
+      // await new Promise((resolve) => setTimeout(resolve, 3000))
 
       await page.evaluate(async (link) => {
         // 异步滚动函数，接受两个参数：最大已滚动距离和回调函数
@@ -260,12 +260,14 @@ export default class ImageExtractor {
         return elements
           .map((element) => {
             if (element.tagName === 'A') {
-              const url = element.getAttribute('href')
-              if (isImageLink(url)) return handleImageLink(url, protocolAndDomain)
+              let url = element.getAttribute('href')
+              url = handleImageLink(url, protocolAndDomain)
+              if (isImageLink(url)) return url
               return null
             } else if (element.tagName === 'IMG') {
               let url = element.getAttribute('src')
-              if (url) return handleImageLink(url, protocolAndDomain)
+              url = handleImageLink(url, protocolAndDomain)
+              if (isImageLink(url)) return url
               return null
             } else if (element.tagName === 'svg') {
               const svgContent = new XMLSerializer().serializeToString(element)
@@ -274,8 +276,9 @@ export default class ImageExtractor {
               console.log('encodedSvgContent: ', encodedSvgContent)
               return `data:image/svg+xml,${encodedSvgContent}`
             } else if (element.tagName === 'META') {
-              const content = element.getAttribute('content')
-              if (isImageLink(content)) return handleImageLink(content, protocolAndDomain)
+              let content = element.getAttribute('content')
+              content = handleImageLink(content, protocolAndDomain)
+              if (isImageLink(content)) return content
               return null
             }
             return null // 返回 null 表示不是图片链接
@@ -325,14 +328,16 @@ export default class ImageExtractor {
         }
 
         function handleImageLink(url, protocolAndDomain) {
-          url = url.replace(/_webp$/, '')
-          if (protocolAndDomain.includes('http://asiantgp.net')) {
-            const prefix = 'http://asiantgp.net/gallery/Japanese_cute_young_wife_Haruka'
-            return prefix + '/' + url
-          } else if (!url.startsWith('http')) {
-            return (url = `${protocolAndDomain}` + url)
-          } else {
-            return url
+          if (url) {
+            url = url.replace(/_webp$/, '')
+            if (protocolAndDomain.includes('http://asiantgp.net')) {
+              const prefix = 'http://asiantgp.net/gallery/Japanese_cute_young_wife_Haruka'
+              return prefix + '/' + url
+            } else if (!url.startsWith('http')) {
+              return (url = `${protocolAndDomain}` + url)
+            } else {
+              return url
+            }
           }
         }
 
@@ -382,8 +387,7 @@ export default class ImageExtractor {
 
               return hrefValues
             })
-          }
-          else if (link.includes('https://www.japanesesexpic.me') || link.includes('http://www.asianpussypic.me')) {
+          } else if (link.includes('https://www.japanesesexpic.me') || link.includes('http://www.asianpussypic.me')) {
             originalImageUrls = await page.evaluate(() => {
               const as = Array.from(document.querySelectorAll('a[target="_blank"]')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
 
@@ -392,8 +396,7 @@ export default class ImageExtractor {
 
               return hrefValues
             })
-          }
-          else if (link.includes('https://chpic.su')) {
+          } else if (link.includes('https://chpic.su')) {
             originalImageUrls = this.images
               .map((imageUrl) => generateOriginalImageUrl(imageUrl, 'transparent'))
               .filter((imageUrl) => imageUrl !== '')
@@ -410,10 +413,12 @@ export default class ImageExtractor {
 
           console.log('originalImageUrls: ', originalImageUrls)
 
-          originalImageUrls = originalImageUrls.map(url => {
-            if (isImageLink(url)) return handleImageLink(url, protocolAndDomain)
-            return null
-          }).filter((link) => link !== null)
+          originalImageUrls = originalImageUrls
+            .map((url) => {
+              if (isImageLink(url)) return handleImageLink(url, protocolAndDomain)
+              return null
+            })
+            .filter((link) => link !== null)
 
           if (!originalImageUrls.length) {
             resolve()
@@ -491,11 +496,10 @@ export default class ImageExtractor {
           // 创建一个新的页面
           const page = await this.globalBrowser.newPage()
           // 设置请求头
-          await page.setExtraHTTPHeaders({
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
-            // Referer: link,
-          })
+          // await page.setExtraHTTPHeaders({
+          //   'User-Agent':
+          //     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+          // })
           //  生成文件名
           // const fileName = this.addExtension(
           //   validateAndModifyFileName(
@@ -538,9 +542,18 @@ export default class ImageExtractor {
 
       // 使用 page.goto 导航到图片的URL
       try {
-        const imageBuffer = await page
-          .goto(imageUrl, { timeout: timeoutMilliseconds })
-          .then((response) => response.buffer())
+        const response = await page.goto(imageUrl, { timeout: timeoutMilliseconds })
+        let imageBuffer
+        const contentType = response.headers()['content-type']
+
+        if (contentType && contentType.startsWith('image/')) {
+          console.log('This response is an image.')
+          imageBuffer = await response.buffer()
+        } else {
+          console.log('This response is not an image.')
+          return resolve()
+        }
+
         await this.successHandler(imageBuffer, targetFilePath, imageUrl)
       } catch (error) {
         await this.errorHandler(error, imageUrl)
