@@ -3,4 +3,4 @@ import ImageExtractor from './crawler-class.js'
 import { config } from './config.js'
 
 const imageExtractor = new ImageExtractor(config)
-imageExtractor.start()
+imageExtractor.extractImages()

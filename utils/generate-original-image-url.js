@@ -15,11 +15,16 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     originalUrl = originalUrl.replace(/_custom1200\.jpg|_square1200\.jpg/, '.jpg')
     // 返回原图链接
     return originalUrl
-  } else if (thumbnailUrl.includes('imx.to')) {
+  } else if (thumbnailUrl.includes('.imx.to')) {
     // 将"/t/"替换为"/i/"
     if (!thumbnailUrl.includes('/t/')) return ''
     return thumbnailUrl.replace('/t/', '/i/')
-  } else if (thumbnailUrl.includes('i8.vipr.im')) {
+  } else if (thumbnailUrl.includes('imx.to/upload/small')) {
+    // 将"/t/"替换为"/i/"
+    if (!thumbnailUrl.includes('/upload/small/')) return ''
+    return thumbnailUrl.replace('imx.to/upload/small/', 'i001.imx.to/i/')
+  }
+  else if (thumbnailUrl.includes('i8.vipr.im')) {
     if (!thumbnailUrl.includes('/th/')) return ''
     // 将"/th/"替换为"/i/"
     let originalUrl = thumbnailUrl.replace('/th/', '/i/')

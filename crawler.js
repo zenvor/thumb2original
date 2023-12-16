@@ -16,8 +16,8 @@ let {
   downloadMode,
   retryInterval,
   retriesCount,
-  targetCrawlingWebPageLink,
-  targetCrawlingWebPageLinks,
+  url,
+  urls,
   downloadFolderPath,
   maxConcurrentRequests,
   maxIntervalMs,
@@ -56,11 +56,11 @@ switch (extractMode) {
     // 启动一个全局浏览器实例
     globalBrowser = await puppeteer.launch({ headless: 'new' })
 
-    await extractingImages(targetCrawlingWebPageLink)
+    await extractingImages(url)
     break
   case 'multipleSites':
     ;(async function () {
-      for (const link of targetCrawlingWebPageLinks) {
+      for (const link of urls) {
         if (link) {
           console.log('\x1b[36m%s\x1b[0m', '开始计时')
           console.time('download time')

@@ -3,7 +3,7 @@
  * @param {string} link
  * @returns
  */
-export function parseLink(link) {
+export function parseUrl(link) {
   try {
     // 使用URL对象来解析链接
     const url = new URL(link)
