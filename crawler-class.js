@@ -63,9 +63,6 @@ export default class ImageExtractor {
         this.globalResolveHandler = resolve
         this.currentUrl = link
 
-        // 启动一个全局浏览器实例
-        this.browser = await puppeteer.launch({ headless: false, timeout: 300 * 1000 })
-
         // 创建一个新的页面
         const page = await this.browser.newPage()
 
@@ -80,13 +77,16 @@ export default class ImageExtractor {
 
         // 查找图像
         await this.findingImages(page)
-        
+
         // 下载图像
         await this.downloadImages(page)
       })
     }
 
     return new Promise(async (resolve) => {
+      // 启动一个全局浏览器实例
+      this.browser = await puppeteer.launch({ headless: false, timeout: 300 * 1000 })
+
       switch (this.extractMode) {
         case 'singleSite':
           console.log('\x1b[36m%s\x1b[0m', '开始计时')
@@ -168,13 +168,13 @@ export default class ImageExtractor {
    */
   scrollingDown(page) {
     return new Promise(async (resolve) => {
-      console.log('向下滚动...', '45%')
+      console.log('向下滚动', '45%')
 
       console.log('向下滚动', '50%')
 
       await page.evaluate(async () => {
         // 异步滚动函数，接受一个参数：最大已滚动距离
-        async function autoScroll(maxScroll, timeout = 2000) {
+        async function autoScroll(maxScroll, timeout = 3000) {
           return new Promise((resolve) => {
             let lastScrollTime = Date.now() // 记录最后一次滚动的时间
             window.onscroll = () => {
@@ -207,7 +207,7 @@ export default class ImageExtractor {
                 isStop = true
               }
               // 设置一个定时器，继续滚动
-              timer = setTimeout(scroll, 100)
+              timer = setTimeout(scroll, 500)
             }
             // 调用内部函数开始滚动
             scroll()
@@ -215,7 +215,7 @@ export default class ImageExtractor {
         }
 
         // 调用异步函数，传入最大已滚动距离为20000像素，回调函数为打印一条消息
-        await autoScroll(20000)
+        await autoScroll(50000)
       })
 
       console.log('提取进度', '60%')
@@ -316,6 +316,10 @@ export default class ImageExtractor {
      * @description 判断是否已经处理完所有照片
      */
     const isFinished = () => {
+      console.log('已请求图片的总数量: ', this.imageCount)
+      console.log('保存失败的数量: ', this.downloadFailedCount)
+      console.log('保存成功的数量: ', this.downloadSuccessfullyCount)
+      console.log('-----------------------------------------------')
       // 如果保存成功的数量 + 保存失败的数量 == 已请求图片的总数量，那就说明本次服务到此可以结束了
       if (this.downloadSuccessfullyCount + this.downloadFailedCount == this.imageCount) {
         console.log('已经处理完所有照片')
@@ -338,20 +342,20 @@ export default class ImageExtractor {
      * @description 错误请求处理器
      */
     const errorHandler = async (error, imageUrl) => {
+      console.log('Error', error?.message)
       // 请求失败 +1
       this.requestFailedCount++
-      console.log('请求失败: ', this.requestFailedCount)
       // 下载失败 +1
       this.downloadFailedCount++
+      console.log('请求失败: ', this.requestFailedCount)
       console.log('请求失败/下载失败: ', this.downloadFailedCount)
-
-      if (!error) {
-        console.log('请求发送失败', imageUrl)
-      } else {
-        this.requestFailedImages.push(imageUrl)
-        console.log(`访问图片时发生错误：`, imageUrl)
+      console.log(`访问图片时发生错误：`, imageUrl)
+      if (
+        error.message !== 'This URL is not an image' &&
+        error.message !== 'Protocol error (Page.navigate): Cannot navigate to invalid URL'
+      ) {
         console.log('错误请求集合个数: ', this.requestFailedImages.length)
-        console.log('error', error)
+        this.requestFailedImages.push(imageUrl)
       }
 
       if (isFinished()) {
@@ -379,7 +383,7 @@ export default class ImageExtractor {
           if (contentType && contentType.startsWith('image/')) {
             buffer = await response.buffer()
           } else {
-            return resolve()
+            throw Error('This URL is not an image')
           }
 
           //  生成文件名
@@ -526,7 +530,11 @@ export default class ImageExtractor {
         await fs.promises.writeFile(targetFilePath, buffer)
         // 下载成功 +1
         this.downloadSuccessfullyCount++
+
+        console.log('下载失败: ', this.downloadFailedCount)
         console.log('下载成功: ', this.downloadSuccessfullyCount)
+        console.log('请求成功:', this.requestSuccessfullyCount)
+        console.log('请求失败:', this.requestFailedCount)
         console.log('\x1b[32m%s\x1b[0m', `已下载 ${this.downloadSuccessfullyCount} 张`)
       } catch (error) {
         this.requestFailedImages.push(imageUrl)
@@ -535,8 +543,6 @@ export default class ImageExtractor {
         console.log('下载失败: ', this.downloadFailedCount)
         console.log('下载失败', error)
       }
-
-      console.log('-----------------------------------------------')
 
       // 判断是否已经处理完所有照片
       if (isFinished()) {
