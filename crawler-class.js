@@ -207,7 +207,7 @@ export default class ImageExtractor {
                 isStop = true
               }
               // 设置一个定时器，继续滚动
-              timer = setTimeout(scroll, 500)
+              timer = setTimeout(scroll, 100)
             }
             // 调用内部函数开始滚动
             scroll()
