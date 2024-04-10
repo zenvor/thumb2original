@@ -15,7 +15,7 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     originalUrl = originalUrl.replace(/_custom1200\.jpg|_square1200\.jpg/, '.jpg')
     // 返回原图链接
     return originalUrl
-  } else if (thumbnailUrl.includes('.imx.to')) {
+  } else if (thumbnailUrl.includes('imx.to')) {
     // 将"/t/"替换为"/i/"
     if (!thumbnailUrl.includes('/t/')) return ''
     return thumbnailUrl.replace('/t/', '/i/')
@@ -23,8 +23,7 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     // 将"/t/"替换为"/i/"
     if (!thumbnailUrl.includes('/upload/small/')) return ''
     return thumbnailUrl.replace('imx.to/upload/small/', 'i001.imx.to/i/')
-  }
-  else if (thumbnailUrl.includes('i8.vipr.im')) {
+  } else if (thumbnailUrl.includes('vipr.im')) {
     if (!thumbnailUrl.includes('/th/')) return ''
     // 将"/th/"替换为"/i/"
     let originalUrl = thumbnailUrl.replace('/th/', '/i/')
@@ -143,26 +142,33 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     let originalUrl = thumbnailUrl.replace('/th', '/i')
     // 返回原图链接
     return originalUrl
-  } else if (thumbnailUrl.includes('https://chpic.su')) {
-    if (!thumbnailUrl.includes('_data')) return ''
+  } else if (thumbnailUrl.includes('chpic.su')) {
+    if (!thumbnailUrl.includes('/stickers/')) return ''
+    thumbnailUrl = thumbnailUrl.split('?')[0]
 
-    const slashStringIndex = thumbnailUrl.lastIndexOf('/')
-    let path = thumbnailUrl.substring(0, slashStringIndex)
-    let fileName = thumbnailUrl.substring(slashStringIndex)
-    let underlinedIndex = fileName.lastIndexOf('_')
-    fileName = fileName.substring(0, underlinedIndex) + fileName.substring(underlinedIndex).replace('_', '@@')
-    console.log('fileName: ', fileName)
-    fileName = fileName.replace(/\/.*?@@/, '/')
-    thumbnailUrl = path + fileName
-    // 把缩略图链接中的`/_data`替换成`/save2/ru`
-    let originalUrl = thumbnailUrl.replace(/\/_data\b/, '/save2/ru')
+    const regex = /\/([^/]+)\/[^/]+\.webp$/
+    const match = regex.exec(thumbnailUrl)
+
+    if (match) {
+      const extractedPart = match[1]
+      thumbnailUrl = thumbnailUrl.replace(`/${extractedPart}_`, '/')
+    }
+
+    // 把缩略图链接中的`/_data`替换为空
+    let originalUrl = thumbnailUrl.replace('/_data', '')
+
+    // 把缩略图链接中的`/stickers/任意字符/`替换成`/save2/ru/stickers`
+    originalUrl = originalUrl.replace(/\/stickers\/[a-z]\/+/, '/save2/ru/stickers/')
+
     // 使用正则表达式替换
-    originalUrl = originalUrl.replace(/\/stickers\/[a-z]\//i, '/stickers/')
+    originalUrl = originalUrl.replace('data.chpic.su', 'chpic.su')
+
     // 使用正则表达式替换
     originalUrl = originalUrl.replace(/\.webp[^/]*/, `/f=webp_c=png_bg=${type}`)
-    // originalUrl = originalUrl.replace(/\.webp[^/]*/, '/f=webp_c=png_bg=white')
+
     // 返回原图链接
-    return originalUrl
+    return `${originalUrl}?type=${type}`
+
   } else if (thumbnailUrl.includes('https://x3vid.com')) {
     if (!thumbnailUrl.includes('/thumbs/')) return ''
     let originalUrl = thumbnailUrl.replace('/thumbs/', '/images/')
@@ -181,19 +187,16 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     let originalUrl = thumbnailUrl.replace('tn_', '')
     // 返回原图链接
     return originalUrl
-  } 
-  else if (thumbnailUrl.includes('https://www.sigmapic.com')) {
+  } else if (thumbnailUrl.includes('https://www.sigmapic.com')) {
     if (!thumbnailUrl.includes('/7_t')) return ''
     let originalUrl = thumbnailUrl.replace('/7_t', '/7_553')
     return originalUrl
-  } 
-  else if (thumbnailUrl.includes('pixhost.to')) {
+  } else if (thumbnailUrl.includes('pixhost.to')) {
     if (!thumbnailUrl.includes('/thumbs')) return ''
     let originalUrl = thumbnailUrl.replace('/thumbs', '/images')
     originalUrl = thumbnailUrl.replace('//t', '//img')
     return originalUrl
-  } 
-  else {
+  } else {
     // 如果是其他网站，返回原始链接
     return ''
   }

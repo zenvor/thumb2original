@@ -85,7 +85,7 @@ export default class ImageExtractor {
 
     return new Promise(async (resolve) => {
       // 启动一个全局浏览器实例
-      this.browser = await puppeteer.launch({ headless: false, timeout: 300 * 1000 })
+      this.browser = await puppeteer.launch({ headless: 'new', timeout: 300 * 1000 })
 
       switch (this.extractMode) {
         case 'singleSite':
@@ -131,19 +131,6 @@ export default class ImageExtractor {
         // 设置访问图像的超时时间为 300 秒
         const timeoutMilliseconds = 1000 * 500
 
-        setTimeout(() => {
-          console.log('加载页面...')
-          console.log('提取进度', '25%')
-        }, 200)
-
-        setTimeout(() => {
-          console.log('提取进度', '30%')
-        }, 500)
-
-        setTimeout(() => {
-          console.log('提取进度', '35%')
-        }, 1000)
-
         // 导航到您想要获取HTML的网址 ['load', 'domcontentloaded', 'networkidle0', 'networkidle2']
         await page.goto(this.currentUrl, { waitUntil: 'networkidle0', timeout: timeoutMilliseconds })
 
@@ -151,7 +138,6 @@ export default class ImageExtractor {
         this.title = await page.title()
         console.log('\x1b[36m%s\x1b[0m', `网页标题${this.title}`)
 
-        console.log('页面加载完成', '40%')
       } catch (error) {
         console.log('error: ', error)
       }
@@ -168,9 +154,6 @@ export default class ImageExtractor {
    */
   scrollingDown(page) {
     return new Promise(async (resolve) => {
-      console.log('向下滚动', '45%')
-
-      console.log('向下滚动', '50%')
 
       await page.evaluate(async () => {
         // 异步滚动函数，接受一个参数：最大已滚动距离
@@ -214,11 +197,9 @@ export default class ImageExtractor {
           })
         }
 
-        // 调用异步函数，传入最大已滚动距离为20000像素，回调函数为打印一条消息
-        await autoScroll(50000)
+        // 调用异步函数，传入最大已滚动距离为 30000 像素
+        await autoScroll(30000)
       })
-
-      console.log('提取进度', '60%')
 
       resolve()
     })
@@ -235,14 +216,6 @@ export default class ImageExtractor {
         : (this.targetDownloadFolderPath = `./download/${validateAndModifyFileName(`${this.title}`)}`)
 
       const { protocolAndDomain } = parseUrl(this.currentUrl)
-
-      console.log('查找图像', '65%')
-
-      console.log('查找图像', '70%')
-
-      console.log('查找图像', '75%')
-
-      console.log('查找图像', '80%')
 
       let images = await page.evaluate((protocolAndDomain) => {
         const elementArray = ['a', 'img', 'svg', 'use', 'meta', 'link']
@@ -311,7 +284,7 @@ export default class ImageExtractor {
   /**
    * 下载图片
    */
-  async downloadImages(page) {
+  async downloadImages(page, requestFailedImages) {
     /**
      * @description 判断是否已经处理完所有照片
      */
@@ -386,6 +359,8 @@ export default class ImageExtractor {
             throw Error('This URL is not an image')
           }
 
+          console.log('buffer: ', buffer)
+
           //  生成文件名
           const fileName = validateAndModifyFileName(this.extractFileName(imageUrl, buffer))
           // 构造目标文件的完整路径
@@ -417,10 +392,26 @@ export default class ImageExtractor {
             responseType: 'arraybuffer',
             timeout: timeoutMilliseconds,
           })
-          const buffer = Buffer.from(response.data, 'binary')
 
-          //  生成文件名
-          const fileName = validateAndModifyFileName(this.extractFileName(imageUrl, buffer))
+          const buffer = Buffer.from(response.data)
+
+          let fileName
+          if (imageUrl.includes('chpic.su')) {
+            const type = imageUrl.split('?type=')[1]
+            // 提取文件名
+            const contentDisposition = response.headers['content-disposition']
+            console.log('contentDisposition: ', contentDisposition)
+            if (contentDisposition) {
+              const match = contentDisposition.match(/filename=["']?([^"']+)/)
+              if (match) {
+                fileName = type + '_' + match[1].split('_-_')[1]
+              }
+            }
+          } else {
+            //  生成文件名
+            fileName = validateAndModifyFileName(this.extractFileName(imageUrl, buffer))
+          }
+
           // 构造目标文件的完整路径
           const targetFilePath = path.join(this.targetDownloadFolderPath, fileName)
 
@@ -450,14 +441,21 @@ export default class ImageExtractor {
       // 下载失败的照片数量
       this.downloadFailedCount = 0
 
-      const requestFailedImagesClone = JSON.parse(JSON.stringify(this.requestFailedImages))
+      const requestFailedImages = JSON.parse(JSON.stringify(this.requestFailedImages))
+      console.log('requestFailedImages: ', requestFailedImages)
       this.requestFailedImages = []
 
       this.downloadFolderPath
         ? (this.targetDownloadFolderPath = this.downloadFolderPath)
         : (this.targetDownloadFolderPath = `./download/${validateAndModifyFileName(`${this.title}`)}`)
 
-      this.downloadImages(this.currentUrl, requestFailedImagesClone)
+      // 创建一个新的页面
+      const page = await this.browser.newPage()
+
+      // 设置视口大小
+      await page.setViewport({ width: 1800, height: 1000 })
+
+      this.downloadImages(page, requestFailedImages)
     }
 
     /**
@@ -526,6 +524,7 @@ export default class ImageExtractor {
      * @param imageUrl buffer
      */
     const saveFile = async (buffer, targetFilePath, imageUrl) => {
+      console.log('buffer: ', buffer)
       try {
         await fs.promises.writeFile(targetFilePath, buffer)
         // 下载成功 +1
@@ -582,19 +581,18 @@ export default class ImageExtractor {
         startTime = Date.now() % 10000
         await Promise.all(
           batchUrls.map(async (imageUrl) => {
-            // 创建一个新的页面
-            const page = await this.browser.newPage()
-            // 设置请求头
-            await page.setExtraHTTPHeaders({
-              'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-            })
-
             requestedImageUrls.push(imageUrl)
 
-            if (this.currentUrl.includes('https://chpic.su')) {
+            if (this.currentUrl.includes('https://chpic.su') && this.downloadMode == 'downloadOriginImagesByThumbnails') {
               return downloadWithAxios(imageUrl)
             } else {
+              // 创建一个新的页面
+              const page = await this.browser.newPage()
+              // 设置请求头
+              await page.setExtraHTTPHeaders({
+                'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+              })
               return download(page, imageUrl)
             }
           })
@@ -606,69 +604,76 @@ export default class ImageExtractor {
       }
     }
 
-    switch (this.downloadMode) {
-      case 'downloadAllImages':
-        handler(this.images)
-        break
-      case 'downloadOriginImagesByThumbnails':
-        let originalImageUrls = []
-        if (this.currentUrl.includes('https://www.eroticbeauties.net')) {
-          // 使用 page.evaluate 方法在页面上下文中执行 JavaScript 代码
-          originalImageUrls = await page.evaluate(() => {
-            const spans = Array.from(document.querySelectorAll('span.jpg')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
+    return new Promise(async (resolve, reject) => {
+      switch (this.downloadMode) {
+        case 'downloadAllImages':
+          handler(this.images)
+          break
+        case 'downloadOriginImagesByThumbnails':
+          let originalImageUrls = []
+          if (this.currentUrl.includes('https://www.eroticbeauties.net')) {
+            // 使用 page.evaluate 方法在页面上下文中执行 JavaScript 代码
+            originalImageUrls = await page.evaluate(() => {
+              const spans = Array.from(document.querySelectorAll('span.jpg')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
 
-            // 使用 Array.map 方法获取每个 <span> 元素的 data-src 属性的值
-            const dataSrcValues = spans.map((span) => span.getAttribute('data-src'))
+              // 使用 Array.map 方法获取每个 <span> 元素的 data-src 属性的值
+              const dataSrcValues = spans.map((span) => span.getAttribute('data-src'))
 
-            return dataSrcValues
-          })
-        } else if (this.currentUrl.includes('http://www.alsasianporn.com')) {
-          originalImageUrls = await page.evaluate(() => {
-            const as = Array.from(document.querySelectorAll('a[data-fancybox="gallery"]')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
+              return dataSrcValues
+            })
+          } else if (this.currentUrl.includes('http://www.alsasianporn.com')) {
+            originalImageUrls = await page.evaluate(() => {
+              const as = Array.from(document.querySelectorAll('a[data-fancybox="gallery"]')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
 
-            // 使用 Array.map 方法获取每个 <span> 元素的 data-src 属性的值
-            const hrefValues = as.map((span) => span.getAttribute('href'))
+              // 使用 Array.map 方法获取每个 <span> 元素的 data-src 属性的值
+              const hrefValues = as.map((span) => span.getAttribute('href'))
 
-            return hrefValues
-          })
-        } else if (
-          this.currentUrl.includes('https://www.japanesesexpic.me') ||
-          this.currentUrl.includes('http://www.asianpussypic.me')
-        ) {
-          originalImageUrls = await page.evaluate(() => {
-            const as = Array.from(document.querySelectorAll('a[target="_blank"]')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
+              return hrefValues
+            })
+          } else if (
+            this.currentUrl.includes('https://www.japanesesexpic.me') ||
+            this.currentUrl.includes('http://www.asianpussypic.me')
+          ) {
+            originalImageUrls = await page.evaluate(() => {
+              const as = Array.from(document.querySelectorAll('a[target="_blank"]')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
 
-            // 使用 Array.map 方法获取每个 <span> 元素的 data-src 属性的值
-            const hrefValues = as.map((span) => span.getAttribute('href'))
+              // 使用 Array.map 方法获取每个 <span> 元素的 data-src 属性的值
+              const hrefValues = as.map((span) => span.getAttribute('href'))
 
-            return hrefValues
-          })
-        } else if (this.currentUrl.includes('https://chpic.su')) {
-          originalImageUrls = this.images
-            .map((imageUrl) => generateOriginalImageUrl(imageUrl, 'transparent'))
-            .filter((imageUrl) => imageUrl !== '')
-          const originalImageUrlsOtherTypes = this.images
-            .map((imageUrl) => generateOriginalImageUrl(imageUrl, 'white'))
-            .filter((imageUrl) => imageUrl !== '')
+              return hrefValues
+            })
+          } else if (this.currentUrl.includes('https://chpic.su')) {
+            if (!requestFailedImages?.length) {
+              originalImageUrls = this.images
+                .map((imageUrl) => generateOriginalImageUrl(imageUrl, 'transparent'))
+                .filter((imageUrl) => imageUrl !== '')
+              const originalImageUrlsOtherTypes = this.images
+                .map((imageUrl) => generateOriginalImageUrl(imageUrl, 'white'))
+                .filter((imageUrl) => imageUrl !== '')
 
-          originalImageUrls.push(...originalImageUrlsOtherTypes)
-        } else {
-          originalImageUrls = this.images
-            .map((imageUrl) => generateOriginalImageUrl(imageUrl))
-            .filter((imageUrl) => imageUrl !== '')
-        }
+              originalImageUrls.push(...originalImageUrlsOtherTypes)
+            }
+          } else {
+            originalImageUrls = this.images
+              .map((imageUrl) => generateOriginalImageUrl(imageUrl))
+              .filter((imageUrl) => imageUrl !== '')
+          }
 
-        console.log('originalImageUrls: ', originalImageUrls)
-        console.log('originalImageUrls.length: ', originalImageUrls.length)
+          console.log('originalImageUrls: ', originalImageUrls)
+          console.log('originalImageUrls.length: ', originalImageUrls.length)
 
-        if (!originalImageUrls.length) {
-          resolve()
-          return console.log('没有匹配到原图')
-        }
-
-        handler(originalImageUrls)
-        break
-    }
+          if (!requestFailedImages?.length) {
+            if (!originalImageUrls.length) {
+              resolve()
+              return console.log('没有匹配到原图')
+            }
+            handler(originalImageUrls)
+          } else {
+            handler(requestFailedImages)
+          }
+          break
+      }
+    })
   }
 
   /**

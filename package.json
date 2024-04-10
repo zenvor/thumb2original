@@ -13,6 +13,6 @@
     "axios": "^1.5.0",
     "cheerio-without-node-native": "^1.0.0-rc.2",
     "lodash": "^4.17.21",
-    "puppeteer": "^21.3.8"
+    "puppeteer": "^22.6.1"
   }
 }
