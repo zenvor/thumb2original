@@ -2,9 +2,9 @@ const config = {
   // 解析模式 'singleSite' 单个站点 | 'multipleSites' 多个站点
   extractMode: 'singleSite',
   // 下载模式 'downloadAllImages' | 'downloadOriginImagesByThumbnails'
-  downloadMode: 'downloadAllImages',
+  downloadMode: 'downloadOriginImagesByThumbnails',
   // 目标解析网站
-  url: '',
+  url: 'https://chpic.su/en/stickers/natsumeyujincho/',
   // 多个目标解析网站
   urls: [],
   // 重试间隔(秒钟)-如果有下载失败的照片，服务会等待一段时间，然后重新下载请求失败的照片，默认 5 秒钟
