@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import axios from 'axios'
 import puppeteer from 'puppeteer'
+import sharp from 'sharp'
 // 检验并生成一个符合 Windows 文件命名规则的文件名
 import { validateAndModifyFileName } from './utils/validate-and-modify-file-name.js'
 // 根据缩略图获取原图
@@ -137,7 +138,6 @@ export default class ImageExtractor {
         // 获取页面标题
         this.title = await page.title()
         console.log('\x1b[36m%s\x1b[0m', `网页标题${this.title}`)
-
       } catch (error) {
         console.log('error: ', error)
       }
@@ -154,7 +154,6 @@ export default class ImageExtractor {
    */
   scrollingDown(page) {
     return new Promise(async (resolve) => {
-
       await page.evaluate(async () => {
         // 异步滚动函数，接受一个参数：最大已滚动距离
         async function autoScroll(maxScroll, timeout = 3000) {
@@ -517,6 +516,37 @@ export default class ImageExtractor {
       }
     }
 
+    const webpToPngBuffer = async (webpBuffer) => {
+      try {
+        // 将 WebP buffer 转换为 PNG buffer
+        const pngBuffer = await sharp(webpBuffer).toFormat('png').toBuffer()
+
+        // 返回 PNG buffer
+        return pngBuffer
+      } catch (error) {
+        console.error('转换出错：', error)
+        return null
+      }
+    }
+
+    const isWebp = async (buffer) => {
+      try {
+        // 使用 Sharp 的 metadata 方法获取图像的元数据
+        const metadata = await sharp(buffer).metadata()
+
+        // 检查图像类型是否为 WebP
+        if (metadata.format === 'webp') {
+          return true
+        } else {
+          return false
+        }
+      } catch (err) {
+        // 处理错误
+        console.error('Error occurred while checking WebP:', err)
+        return false
+      }
+    }
+
     /**
      * @description 保存文件
      * @param buffer buffer
@@ -524,8 +554,28 @@ export default class ImageExtractor {
      * @param imageUrl buffer
      */
     const saveFile = async (buffer, targetFilePath, imageUrl) => {
+      console.log('targetFilePath: ', targetFilePath);
       console.log('buffer: ', buffer)
+
       try {
+        // 判断是否是 WebP 图片
+        const result = await isWebp(buffer)
+
+        if (result) {
+          buffer = await webpToPngBuffer(buffer)
+          if (buffer) {
+            console.log('webp to png 转换成功！')
+          } else {
+            console.log('webp to png 转换失败！')
+          }
+          targetFilePath = targetFilePath.replace('.webp', '.png')
+        } else {
+          console.log('This is not a WebP image.')
+        }
+        
+
+        
+
         await fs.promises.writeFile(targetFilePath, buffer)
         // 下载成功 +1
         this.downloadSuccessfullyCount++
