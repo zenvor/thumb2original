@@ -29,13 +29,6 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     let originalUrl = thumbnailUrl.replace('/th/', '/i/')
     // originalUrl = originalUrl.replace('.jpg', '.jpeg')
     return originalUrl
-  } else if (thumbnailUrl.includes('https://c-ssl.dtstatic.com')) {
-    // 把缩略图链接中的`dtstatic.com`替换成`duitang.com`
-    let originalUrl = thumbnailUrl.replace('dtstatic.com', 'duitang.com')
-    // 去掉缩略图链接中的`.thumb.400_0`
-    originalUrl = originalUrl.replace('.thumb.400_0', '')
-    // 返回原图链接
-    return originalUrl
   } else if (thumbnailUrl.includes('https://thumbs2.imgbox.com')) {
     if (!thumbnailUrl.includes('thumbs2')) return ''
     // 把缩略图链接中的`thumbs2`替换成`images2`
@@ -168,7 +161,13 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
 
     // 返回原图链接
     return `${originalUrl}?type=${type}`
-
+  } else if (thumbnailUrl.includes('https://c-ssl.dtstatic.com')) {
+    // 把缩略图链接中的`dtstatic.com`替换成`duitang.com`
+    let originalUrl = thumbnailUrl.replace('dtstatic.com', 'duitang.com')
+    // 去掉缩略图链接中的`.thumb.400_0`
+    originalUrl = originalUrl.replace('.thumb.400_0', '')
+    // 返回原图链接
+    return originalUrl
   } else if (thumbnailUrl.includes('https://x3vid.com')) {
     if (!thumbnailUrl.includes('/thumbs/')) return ''
     let originalUrl = thumbnailUrl.replace('/thumbs/', '/images/')
@@ -196,6 +195,11 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     let originalUrl = thumbnailUrl.replace('/thumbs', '/images')
     originalUrl = thumbnailUrl.replace('//t', '//img')
     return originalUrl
+  } else if (thumbnailUrl.includes('bravoerotica.com')) {
+    if (!thumbnailUrl.includes('/hegre')) return ''
+    return thumbnailUrl.replace(/\/([^/]*)$/, (match, p1) => {
+      return '/' + p1.replace(/t/g, '')
+    })
   } else {
     // 如果是其他网站，返回原始链接
     return ''
