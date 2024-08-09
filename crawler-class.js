@@ -291,6 +291,7 @@ export default class ImageExtractor {
       console.log('已请求图片的总数量: ', this.imageCount)
       console.log('保存失败的数量: ', this.downloadFailedCount)
       console.log('保存成功的数量: ', this.downloadSuccessfullyCount)
+      console.log('当前访问的链接:', this.currentUrl);
       console.log('-----------------------------------------------')
       // 如果保存成功的数量 + 保存失败的数量 == 已请求图片的总数量，那就说明本次服务到此可以结束了
       if (this.downloadSuccessfullyCount + this.downloadFailedCount == this.imageCount) {
@@ -357,8 +358,6 @@ export default class ImageExtractor {
           } else {
             throw Error('This URL is not an image')
           }
-
-          console.log('buffer: ', buffer)
 
           //  生成文件名
           const fileName = validateAndModifyFileName(this.extractFileName(imageUrl, buffer))
@@ -554,7 +553,7 @@ export default class ImageExtractor {
      * @param imageUrl buffer
      */
     const saveFile = async (buffer, targetFilePath, imageUrl) => {
-      console.log('targetFilePath: ', targetFilePath);
+      console.log('targetFilePath: ', targetFilePath)
       console.log('buffer: ', buffer)
 
       try {
@@ -572,9 +571,6 @@ export default class ImageExtractor {
         } else {
           console.log('This is not a WebP image.')
         }
-        
-
-        
 
         await fs.promises.writeFile(targetFilePath, buffer)
         // 下载成功 +1
@@ -703,11 +699,27 @@ export default class ImageExtractor {
 
               originalImageUrls.push(...originalImageUrlsOtherTypes)
             }
+          } else if (containsRestrictedWords(this.currentUrl)) {
+            originalImageUrls = await page.evaluate((currentUrl) => {
+              const imgEls = Array.from(document.querySelectorAll('img'))
+
+              const srcValues = imgEls.map((el) => {
+                const srcValue = el.getAttribute('src')
+                if (!srcValue.includes('tn_')) return ''
+                return currentUrl.split('?')[0] + srcValue.replace('tn_', '')
+              })
+
+              return srcValues
+            }, this.currentUrl)
           } else {
             originalImageUrls = this.images
               .map((imageUrl) => generateOriginalImageUrl(imageUrl))
               .filter((imageUrl) => imageUrl !== '')
           }
+
+          originalImageUrls = originalImageUrls
+            .filter((imageUrl) => imageUrl !== '')
+
 
           console.log('originalImageUrls: ', originalImageUrls)
           console.log('originalImageUrls.length: ', originalImageUrls.length)
@@ -720,6 +732,47 @@ export default class ImageExtractor {
             handler(originalImageUrls)
           } else {
             handler(requestFailedImages)
+          }
+
+          function containsRestrictedWords(str) {
+            const restrictedWords = [
+              'theasianpics',
+              'asiansexphotos',
+              'asianmatureporn',
+              'asianamateurgirls',
+              'hotasianamateurs',
+              'amateurchinesepics',
+              'asiannudistpictures',
+              'filipinahotties',
+              'chinesesexphotos',
+              'japaneseteenpics',
+              'hotnudefilipinas',
+              'asianteenpictures',
+              'asianteenphotos',
+              'chineseteenpics',
+              'cuteasians',
+              'amateurasianpictures',
+              'chinesexxxpics',
+              'sexyasians',
+              'allasiansphotos',
+              'chinese-girlfriends',
+              'chinesegirlspictures',
+              'chinese-sex.xyz',
+              'asian-cuties-online',
+              'japaneseamateurpics',
+              'asiangalleries',
+              'filipinapornpictures',
+              'japanesenudities',
+              'koreanpornpics',
+              'filipinanudes',
+              'chinesepornpics',
+              'asianamatures',
+              'nudehotasians',
+              'asianpornpictures',
+              'orientgirlspictures',
+            ]
+
+            return restrictedWords.some((word) => str.includes(word))
           }
           break
       }
