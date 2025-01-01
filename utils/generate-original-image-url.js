@@ -200,6 +200,9 @@ export function generateOriginalImageUrl(thumbnailUrl, type) {
     return thumbnailUrl.replace(/\/([^/]*)$/, (match, p1) => {
       return '/' + p1.replace(/t/g, '')
     })
+  } else if (thumbnailUrl.includes('jjgirls.com')) {
+    if (!thumbnailUrl.includes('/cute-')) return ''
+    return thumbnailUrl.replace('/cute-', '')
   } else {
     // 如果是其他网站，返回原始链接
     return ''

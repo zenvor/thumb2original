@@ -86,7 +86,7 @@ export default class ImageExtractor {
 
     return new Promise(async (resolve) => {
       // 启动一个全局浏览器实例
-      this.browser = await puppeteer.launch({ headless: 'new', timeout: 300 * 1000 })
+      this.browser = await puppeteer.launch({ headless: false, timeout: 300 * 1000 })
 
       switch (this.extractMode) {
         case 'singleSite':
@@ -131,7 +131,6 @@ export default class ImageExtractor {
       try {
         // 设置访问图像的超时时间为 300 秒
         const timeoutMilliseconds = 1000 * 500
-
         // 导航到您想要获取HTML的网址 ['load', 'domcontentloaded', 'networkidle0', 'networkidle2']
         await page.goto(this.currentUrl, { waitUntil: 'networkidle0', timeout: timeoutMilliseconds })
 
@@ -217,7 +216,7 @@ export default class ImageExtractor {
       const { protocolAndDomain } = parseUrl(this.currentUrl)
 
       let images = await page.evaluate((protocolAndDomain) => {
-        const elementArray = ['a', 'img', 'svg', 'use', 'meta', 'link']
+        const elementArray = ['a', 'img', 'svg', 'use', 'meta', 'link', 'figure']
 
         const elements = Array.from(document.querySelectorAll('img')) // 获取所有的 a 和 img 元素
         return elements
@@ -343,6 +342,43 @@ export default class ImageExtractor {
      * @returns
      */
     const download = (page, imageUrl) => {
+      function isImage(buffer) {
+        const bytes = new Uint8Array(buffer);
+
+        // 提取前几个字节
+        const header = bytes.subarray(0, 16);
+
+        // JPEG: 0xFFD8
+        if (header[0] === 0xFF && header[1] === 0xD8) {
+          return true;
+        }
+        // PNG: 0x89504E47
+        else if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47) {
+          return true;
+        }
+        // GIF: GIF89a 或 GIF87a
+        else if (header[0] === 0x47 && header[1] === 0x49 && header[2] === 0x46) {
+          return true;
+        }
+        // WebP: RIFF 和 WEBP
+        else if (header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46 &&
+          header[8] === 0x57 && header[9] === 0x45 && header[10] === 0x42 && header[11] === 0x50) {
+          return true;
+        }
+        // BMP: 0x424D
+        else if (header[0] === 0x42 && header[1] === 0x4D) {
+          return true;
+        }
+        // TIFF: 0x49492A00 (小端) 或 0x4D4D002A (大端)
+        else if (
+          (header[0] === 0x49 && header[1] === 0x49 && header[2] === 0x2A && header[3] === 0x00) || // 小端
+          (header[0] === 0x4D && header[1] === 0x4D && header[2] === 0x00 && header[3] === 0x2A)    // 大端
+        ) {
+          return true;
+        }
+
+        return false; // 不是图像
+      }
       return new Promise(async (resolve) => {
         // 设置访问图片的超时时间
         const timeoutMilliseconds = 1000 * 60
@@ -352,10 +388,8 @@ export default class ImageExtractor {
           const response = await page.goto(imageUrl, { timeout: timeoutMilliseconds })
           let buffer
           const contentType = response.headers()['content-type']
-
-          if (contentType && contentType.startsWith('image/')) {
-            buffer = await response.buffer()
-          } else {
+          buffer = await response.buffer()
+          if (!isImage(buffer)) {
             throw Error('This URL is not an image')
           }
 
@@ -371,6 +405,8 @@ export default class ImageExtractor {
 
         resolve()
       })
+
+
     }
 
     /**
@@ -636,8 +672,7 @@ export default class ImageExtractor {
               const page = await this.browser.newPage()
               // 设置请求头
               await page.setExtraHTTPHeaders({
-                'User-Agent':
-                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                'Referer': '',
               })
               return download(page, imageUrl)
             }

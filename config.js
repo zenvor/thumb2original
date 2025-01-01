@@ -1,12 +1,14 @@
 const config = {
   // 解析模式 'singleSite' 单个站点 | 'multipleSites' 多个站点
-  extractMode: 'singleSite',
+  extractMode: 'multipleSites',
   // 下载模式 'downloadAllImages' | 'downloadOriginImagesByThumbnails'
   downloadMode: 'downloadOriginImagesByThumbnails',
   // 目标解析网站
-  url: 'https://chpic.su/en/stickers/natsumeyujincho/',
+  url: 'https://guomo.neocities.org/posts/832c19e5d53a0c9a2ab4c9fe9a9f9710/',
   // 多个目标解析网站
-  urls: [],
+  urls: [
+    'https://jjgirls.com/japanese/emi-hayasaka/8/'
+  ],
   // 重试间隔(秒钟)-如果有下载失败的照片，服务会等待一段时间，然后重新下载请求失败的照片，默认 5 秒钟
   retryInterval: 5,
   // 重试次数
