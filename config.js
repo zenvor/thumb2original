@@ -1,10 +1,10 @@
 const config = {
   // 解析模式 'singleSite' 单个站点 | 'multipleSites' 多个站点
-  extractMode: 'multipleSites',
+  extractMode: 'singleSite',
   // 下载模式 'downloadAllImages' | 'downloadOriginImagesByThumbnails'
-  downloadMode: 'downloadOriginImagesByThumbnails',
+  downloadMode: 'downloadAllImages',
   // 目标解析网站
-  url: 'https://guomo.neocities.org/posts/832c19e5d53a0c9a2ab4c9fe9a9f9710/',
+  url: 'https://www.duitang.com/category/?cat=wallpaper',
   // 多个目标解析网站
   urls: [
     'https://jjgirls.com/japanese/emi-hayasaka/8/'
