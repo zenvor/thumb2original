@@ -6,9 +6,7 @@ const config = {
   // 目标解析网站
   url: 'https://www.duitang.com/category/?cat=wallpaper',
   // 多个目标解析网站
-  urls: [
-    'https://jjgirls.com/japanese/emi-hayasaka/8/'
-  ],
+  urls: [],
   // 重试间隔(秒钟)-如果有下载失败的照片，服务会等待一段时间，然后重新下载请求失败的照片，默认 5 秒钟
   retryInterval: 5,
   // 重试次数
