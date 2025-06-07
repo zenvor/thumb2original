@@ -1,3 +1,8 @@
+import { ConsolaLogger as Logger } from '../../logger/ConsolaLogger.js'
+
+// 获取全局logger实例
+const logger = Logger.getGlobal()
+
 /**
  * 解析链接
  * @param {string} link
@@ -26,7 +31,7 @@ export function parseUrl(link) {
       protocolAndDomain: `${protocol}//${domain}`
     }
   } catch (error) {
-    // 如果解析失败，返回错误信息
-    console.error('解析图片链接失败: ' + error.message)
+    // 如果解析失败，使用logger记录错误
+    logger.error('解析图片链接失败', error)
   }
 }
