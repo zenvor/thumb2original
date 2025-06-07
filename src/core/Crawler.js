@@ -240,65 +240,37 @@ export class Crawler {
   async performDownload(imageUrls, retryCount = 0) {
     const targetDownloadPath = this.imageExtractor.getTargetDownloadPath()
     const currentUrl = this.imageExtractor.getCurrentUrl()
-    const maxConcurrentRequests = this.config.get('maxConcurrentRequests')
 
-    // 🚀 优化：根据实际图片数量智能创建页面池，避免资源浪费
-    const actualConcurrentRequests = Math.min(maxConcurrentRequests, imageUrls.length)
-    
-    // 🎯 在进度条模式下抑制会干扰进度条显示的日志
-    const enableProgressBar = this.config.get('enableProgressBar')
-    if (!enableProgressBar) {
-    this.logger.info(`智能页面池：需要下载 ${imageUrls.length} 张图片，创建 ${actualConcurrentRequests} 个标签页（最大并发：${maxConcurrentRequests}）`)
-    } else {
-      this.logger.debug(`智能页面池：需要下载 ${imageUrls.length} 张图片，创建 ${actualConcurrentRequests} 个标签页（最大并发：${maxConcurrentRequests}）`)
-    }
-
-    // 创建页面池以复用页面
-    const pagePool = []
-    const startTime = Date.now()
-    
-    // 🎯 并行创建页面，但数量基于实际需求
-    const pageCreationPromises = Array.from({ length: actualConcurrentRequests }, async () => {
-      return await this.imageExtractor.createPage({ setReferer: true })
-    })
-    
-    try {
-      const pages = await Promise.all(pageCreationPromises)
-      pagePool.push(...pages)
-      
-      const creationTime = Date.now() - startTime
-      this.logger.debug(`页面池创建完成，用时 ${creationTime}ms`)
-    } catch (error) {
-      this.logger.debug('页面池创建失败', error) // 改为debug级别，避免重复记录
-      throw error
+    // 创建页面的函数，传递给 DownloadManager 按需使用
+    const createPageFunc = () => {
+      return this.imageExtractor.createPage({ setReferer: true })
     }
 
     try {
-      // 执行批量下载
-      await this.downloadManager.downloadBatch(imageUrls, targetDownloadPath, pagePool, this.stateManager, currentUrl)
+      // 执行批量下载（页面池将在 DownloadManager 内部按需创建和管理）
+      await this.downloadManager.downloadBatch(imageUrls, targetDownloadPath, this.stateManager, currentUrl, createPageFunc)
 
       // 下载完成后的处理
-      this.handleDownloadComplete(targetDownloadPath, pagePool, currentUrl, retryCount)
-    } finally {
-      // 安全地关闭页面池中的所有页面
-      await this.downloadManager.closePagePool(pagePool)
+      this.handleDownloadComplete(targetDownloadPath, currentUrl, retryCount)
+    } catch (error) {
+      this.logger.debug('下载过程中出现错误', error)
+      throw error
     }
   }
 
   /**
    * 处理下载完成
    * @param {string} targetDownloadPath 目标下载路径
-   * @param {Array} pagePool 页面池
    * @param {string} currentUrl 当前URL
    * @param {number} retryCount 重试次数
    */
-  handleDownloadComplete(targetDownloadPath, pagePool, currentUrl, retryCount) {
+  handleDownloadComplete(targetDownloadPath, currentUrl, retryCount) {
     const failedImages = this.downloadManager.getFailedImages()
 
     if (failedImages.length > 0) {
       this.logger.debug('失败的图片URLs: ', failedImages)
       // 执行重试
-      this.executeRetry(failedImages, targetDownloadPath, pagePool, currentUrl, retryCount)
+      this.executeRetry(failedImages, targetDownloadPath, currentUrl, retryCount)
     } else {
       // 下载完成
       this.finishDownload()
@@ -309,11 +281,10 @@ export class Crawler {
    * 执行重试逻辑
    * @param {Array} failedImages 失败的图片URLs
    * @param {string} targetDownloadPath 目标下载路径
-   * @param {Array} pagePool 页面池
    * @param {string} currentUrl 当前URL
    * @param {number} currentRetryCount 当前重试次数
    */
-  async executeRetry(failedImages, targetDownloadPath, pagePool, currentUrl, currentRetryCount) {
+  async executeRetry(failedImages, targetDownloadPath, currentUrl, currentRetryCount) {
     const maxRetries = this.config.get('retriesCount')
     const retryInterval = this.config.get('retryInterval')
 

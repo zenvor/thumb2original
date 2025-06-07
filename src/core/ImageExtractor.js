@@ -125,7 +125,9 @@ export class ImageExtractor {
 
       // 导航到您想要获取HTML的网址
       await page.goto(this.currentUrl, {
-        waitUntil: 'networkidle0',
+        // FIXME: 测试阶段，先使用 load，后续再使用domcontentloaded
+        // waitUntil: 'networkidle0',
+        waitUntil: 'load',
         timeout: timeoutMilliseconds,
       })
 
@@ -255,13 +257,13 @@ export class ImageExtractor {
       }
     }, protocolAndDomain)
 
-    // 处理WebP格式的图片
-    images.forEach((url) => {
-      if (url.includes('_webp')) {
-        const jpegUrl = url.replace('_webp', '')
-        images.push(jpegUrl)
-      }
-    })
+    // // 处理WebP格式的图片
+    // images.forEach((url) => {
+    //   if (url.includes('_webp')) {
+    //     const jpegUrl = url.replace('_webp', '')
+    //     images.push(jpegUrl)
+    //   }
+    // })
 
     // 使用 Set 去重
     images = Array.from(new Set(images))

@@ -46,6 +46,108 @@ export class DownloadManager {
   }
 
   /**
+   * 判断指定URL是否应该使用Puppeteer
+   * @param {string} imageUrl 图片URL
+   * @param {string} currentUrl 当前页面URL
+   * @returns {boolean} 是否使用Puppeteer
+   * @private
+   */
+  _shouldUsePuppeteer(imageUrl, currentUrl) {
+    const downloadMode = this.config.get('downloadMode')
+
+    // 场景1：特殊网站使用axios下载
+    if (currentUrl.includes('https://chpic.su') && downloadMode === 'downloadOriginImagesByThumbnails') {
+      return false
+    }
+
+    // 场景2：直接图片链接使用axios（模拟直接下载的场景）
+    if (imageUrl.includes('direct-download')) {
+      return false
+    }
+
+    // 场景3：特定CDN使用axios（扩展功能）
+    if (imageUrl.includes('cdn.example.com')) {
+      return false
+    }
+
+    // 默认使用Puppeteer
+    return true
+  }
+
+  /**
+   * 估算需要使用Puppeteer的请求数量
+   * @param {Array} imageUrls 图片URL数组
+   * @param {string} currentUrl 当前页面URL
+   * @param {number} maxConcurrentRequests 最大并发请求数
+   * @returns {number} 需要Puppeteer的并发请求数量
+   * @private
+   */
+  _estimatePuppeteerNeeds(imageUrls, currentUrl, maxConcurrentRequests) {
+    // 计算第一轮并发请求的实际数量
+    const firstBatchSize = Math.min(maxConcurrentRequests, imageUrls.length)
+
+    // 计算第一轮中需要使用Puppeteer的请求数量
+    let puppeteerCount = 0
+    for (let i = 0; i < firstBatchSize; i++) {
+      if (this._shouldUsePuppeteer(imageUrls[i], currentUrl)) {
+        puppeteerCount++
+      }
+    }
+
+    return puppeteerCount
+  }
+
+  /**
+   * 创建按需页面池
+   * @param {Array} imageUrls 图片URL数组
+   * @param {string} currentUrl 当前页面URL
+   * @param {number} maxConcurrentRequests 最大并发请求数
+   * @param {Function} createPageFunc 创建页面的函数
+   * @returns {Promise<Array>} 页面池数组
+   * @private
+   */
+  async _createOnDemandPagePool(imageUrls, currentUrl, maxConcurrentRequests, createPageFunc) {
+    // 估算需要的页面数量
+    const puppeteerNeeds = this._estimatePuppeteerNeeds(imageUrls, currentUrl, maxConcurrentRequests)
+
+    if (puppeteerNeeds === 0) {
+      this.logger.debug('所有请求使用axios下载，无需创建页面池')
+      return []
+    }
+
+    const enableProgressBar = this.config.get('enableProgressBar')
+    if (!enableProgressBar) {
+      this.logger.info(
+        `按需页面池：第一轮 ${Math.min(
+          maxConcurrentRequests,
+          imageUrls.length
+        )} 个请求中，${puppeteerNeeds} 个需要Puppeteer，创建 ${puppeteerNeeds} 个标签页`
+      )
+    } else {
+      this.logger.debug(
+        `按需页面池：第一轮 ${Math.min(
+          maxConcurrentRequests,
+          imageUrls.length
+        )} 个请求中，${puppeteerNeeds} 个需要Puppeteer，创建 ${puppeteerNeeds} 个标签页`
+      )
+    }
+
+    // 并行创建页面池
+    const startTime = Date.now()
+    const pageCreationPromises = Array.from({ length: puppeteerNeeds }, () => createPageFunc())
+
+    try {
+      const pages = await Promise.all(pageCreationPromises)
+      const creationTime = Date.now() - startTime
+      this.logger.debug(`页面池创建完成，用时 ${creationTime}ms`)
+      return pages
+    } catch (error) {
+      this.logger.debug('页面池创建失败', error)
+      throw error
+    }
+  }
+
+  /**
    * 使用Puppeteer下载单个图片
    * @param {object} page Puppeteer页面对象
    * @param {string} imageUrl 图片URL
@@ -108,7 +210,35 @@ export class DownloadManager {
         page.off('response', responseHandler)
       }
     } catch (error) {
-      await this._handleDownloadError(error, imageUrl, stateManager)
+      // 🚀 智能fallback：当Puppeteer下载失败时，自动尝试使用axios下载
+      const enableProgressBar = this.config.get('enableProgressBar')
+      
+      if (!enableProgressBar) {
+        this.logger.warn(`Puppeteer下载失败，尝试使用axios下载: ${imageUrl}`)
+        this.logger.debug(`Puppeteer错误信息: ${error.message}`)
+      } else {
+        this.logger.debug(`Puppeteer下载失败，fallback到axios: ${imageUrl}`, error)
+      }
+      
+      try {
+        // 使用axios进行fallback下载
+        await this.downloadWithAxios(imageUrl, stateManager, targetDownloadPath)
+        
+        if (!enableProgressBar) {
+          this.logger.success(`axios fallback下载成功: ${imageUrl}`)
+        } else {
+          this.logger.debug(`axios fallback下载成功: ${imageUrl}`)
+        }
+      } catch (axiosError) {
+        // 如果axios也失败了，才记录为真正的失败
+        await this._handleDownloadError(axiosError, imageUrl, stateManager)
+        
+        if (!enableProgressBar) {
+          this.logger.error(`Puppeteer和axios都下载失败: ${imageUrl}`)
+        } else {
+          this.logger.debug(`Puppeteer和axios都下载失败: ${imageUrl}`, axiosError)
+        }
+      }
     }
   }
 
@@ -267,14 +397,21 @@ export class DownloadManager {
    * 下载图片批次
    * @param {Array} imageUrls 图片URL数组
    * @param {string} targetDownloadPath 目标下载路径
-   * @param {Array} pagePool 页面池
    * @param {Object} stateManager 状态管理器
    * @param {string} currentUrl 当前页面URL
+   * @param {Function} createPageFunc 创建页面的函数
    * @returns {Promise<void>}
    */
-  async downloadBatch(imageUrls, targetDownloadPath, pagePool, stateManager, currentUrl) {
+  async downloadBatch(imageUrls, targetDownloadPath, stateManager, currentUrl, createPageFunc) {
     // 创建目标目录
     this._createTargetDirectory(targetDownloadPath)
+
+    const maxConcurrentRequests = this.config.get('maxConcurrentRequests')
+    const minIntervalMs = this.config.get('minIntervalMs')
+    const maxIntervalMs = this.config.get('maxIntervalMs')
+
+    // 🚀 按需创建页面池：只为需要Puppeteer的请求创建页面
+    const pagePool = await this._createOnDemandPagePool(imageUrls, currentUrl, maxConcurrentRequests, createPageFunc)
 
     // 随机请求间隔（毫秒）
     let randomInterval = 0
@@ -283,19 +420,16 @@ export class DownloadManager {
     // 请求的结束时间（每一轮）
     let endTime = 0
 
-    // 🚀 优化：使用页面池的实际大小作为并发数，而不是配置值
-    const actualConcurrentRequests = pagePool.length
-    const minIntervalMs = this.config.get('minIntervalMs')
-    const maxIntervalMs = this.config.get('maxIntervalMs')
-    const downloadMode = this.config.get('downloadMode')
+    // 页面池索引，用于循环复用页面
+    let pagePoolIndex = 0
 
-    this.logger.debug(`实际并发数：${actualConcurrentRequests}，图片总数：${imageUrls.length}`)
+    this.logger.debug(`按需页面池大小：${pagePool.length}，图片总数：${imageUrls.length}`)
 
     try {
       /* 随机化请求间隔：为了更好地模拟真实用户的行为，在请求之间添加随机的时间间隔，
         而不是固定的间隔。这可以减少模式化的请求，降低被识别为爬虫的概率。 */
-      for (let i = 0; i < imageUrls.length; i += actualConcurrentRequests) {
-        const batchUrls = imageUrls.slice(i, i + actualConcurrentRequests)
+      for (let i = 0; i < imageUrls.length; i += maxConcurrentRequests) {
+        const batchUrls = imageUrls.slice(i, i + maxConcurrentRequests)
         const timeRemaining = randomInterval - (endTime - startTime)
         if (timeRemaining > 0) {
           randomInterval = timeRemaining
@@ -306,14 +440,17 @@ export class DownloadManager {
         startTime = Date.now() % 10000
 
         await Promise.all(
-          batchUrls.map(async (imageUrl, index) => {
-            if (currentUrl.includes('https://chpic.su') && downloadMode == 'downloadOriginImagesByThumbnails') {
-              debugger
-              return this.downloadWithAxios(imageUrl, stateManager, targetDownloadPath)
-            } else {
+          batchUrls.map(async (imageUrl) => {
+            if (this._shouldUsePuppeteer(imageUrl, currentUrl)) {
               // 使用页面池中的页面，循环复用
-              const page = pagePool[index % pagePool.length]
+              if (pagePool.length === 0) {
+                throw new Error('需要使用Puppeteer但页面池为空')
+              }
+              const page = pagePool[pagePoolIndex % pagePool.length]
+              pagePoolIndex++
               return this.downloadWithPuppeteer(page, imageUrl, stateManager, targetDownloadPath)
+            } else {
+              return this.downloadWithAxios(imageUrl, stateManager, targetDownloadPath)
             }
           })
         )
@@ -326,6 +463,9 @@ export class DownloadManager {
     } catch (error) {
       this.logger.error('批量下载过程中出现错误', error)
       throw error
+    } finally {
+      // 安全地关闭页面池中的所有页面
+      await this.closePagePool(pagePool)
     }
   }
 
@@ -403,5 +543,9 @@ export class DownloadManager {
 
     await Promise.allSettled(closePromises)
     this.logger.debug('页面池已全部关闭')
+
+    // 🚀 添加200ms延迟，确保浏览器优雅关闭
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    this.logger.debug('页面池关闭延迟完成')
   }
 }
