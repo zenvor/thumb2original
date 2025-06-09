@@ -63,8 +63,47 @@ export class ConfigManager {
       enableProgressBar: true, // 是否启用高颜值进度条
       progressUpdateFrequency: 'realtime', // 进度条更新频率 'realtime' | 'fast' | 'normal' | 'slow'
 
-      // 页面池管理策略 'auto' | 'reuse' | 'progressive'
-      pagePoolStrategy: 'auto', // auto: 根据图片数量自动选择, reuse: 复用式, progressive: 渐进式
+      // 🧠 Page Pool 2.0 页面池管理策略
+      pagePoolStrategy: 'auto', // 'auto' | 'reuse' | 'progressive'
+      
+      // 🧠 Page Pool 2.0 详细配置
+      pagePool: {
+        // PWS (Page Weight Score) 权重配置
+        pws: {
+          weights: {
+            images: 0.3,      // 图片数量权重 (30%)
+            domNodes: 0.25,   // DOM节点权重 (25%)
+            bytes: 0.25,      // 字节数权重 (25%)
+            heap: 0.2         // 堆内存权重 (20%)
+          }
+        },
+        
+        // Auto策略双因子阈值配置
+        autoThreshold: {
+          pws: 50,              // PWS阈值，低于此值使用reuse策略
+          freeMemPercent: 25    // 可用内存百分比阈值，低于此值强制使用progressive策略
+        },
+        
+        // Reuse策略健康检查配置
+        reuse: {
+          poolSize: 5,          // 默认页面池大小
+          maxReuse: 20,         // 单个页面最大复用次数
+          maxHeap: 200,         // 堆内存使用上限 (MB)
+          maxErrors: 3          // 连续5xx错误上限
+        },
+        
+        // Progressive策略配置
+        progressive: {
+          batchSize: 3,         // 批次大小
+          preloadNext: true     // 是否启用异步预热下一批页面
+        },
+        
+        // 监控和可观测性配置
+        monitor: {
+          enableProm: false,    // 是否启用Prometheus指标
+          endpoint: '/metrics'  // 指标端点
+        }
+      }
     }
 
     // 合并配置
@@ -101,13 +140,34 @@ export class ConfigManager {
     // 深度合并嵌套对象
     for (const key in userConfig) {
       if (userConfig[key] !== null && typeof userConfig[key] === 'object' && !Array.isArray(userConfig[key])) {
-        merged[key] = { ...defaultConfig[key], ...userConfig[key] }
+        merged[key] = this._deepMerge(defaultConfig[key] || {}, userConfig[key])
       } else {
         merged[key] = userConfig[key]
       }
     }
 
     return merged
+  }
+
+  /**
+   * 深度合并对象（支持嵌套配置）
+   * @param {Object} target 目标对象
+   * @param {Object} source 源对象
+   * @returns {Object} 合并后的对象
+   * @private
+   */
+  _deepMerge(target, source) {
+    const result = { ...target }
+    
+    for (const key in source) {
+      if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+        result[key] = this._deepMerge(target[key] || {}, source[key])
+      } else {
+        result[key] = source[key]
+      }
+    }
+    
+    return result
   }
 
   /**
@@ -128,6 +188,14 @@ export class ConfigManager {
       CRAWLER_MAX_INTERVAL: 'maxIntervalMs',
       CRAWLER_MIN_INTERVAL: 'minIntervalMs',
       CRAWLER_DOWNLOAD_PATH: 'downloadFolderPath',
+      // 🧠 Page Pool 2.0 环境变量支持
+      CRAWLER_PAGE_POOL_STRATEGY: 'pagePoolStrategy',
+      CRAWLER_PWS_THRESHOLD: 'pagePool.autoThreshold.pws',
+      CRAWLER_MEM_THRESHOLD: 'pagePool.autoThreshold.freeMemPercent',
+      CRAWLER_MAX_REUSE: 'pagePool.reuse.maxReuse',
+      CRAWLER_MAX_HEAP: 'pagePool.reuse.maxHeap',
+      CRAWLER_MAX_ERRORS: 'pagePool.reuse.maxErrors',
+      CRAWLER_PRELOAD_NEXT: 'pagePool.progressive.preloadNext',
     }
 
     for (const [envKey, configKey] of Object.entries(envMapping)) {
@@ -138,18 +206,47 @@ export class ConfigManager {
         if (
           ['retryInterval', 'retriesCount', 'maxConcurrentRequests', 'maxIntervalMs', 'minIntervalMs'].includes(
             configKey
-          )
+          ) ||
+          configKey.includes('pws') ||
+          configKey.includes('freeMemPercent') ||
+          configKey.includes('maxReuse') ||
+          configKey.includes('maxHeap') ||
+          configKey.includes('maxErrors')
         ) {
-          envConfig[configKey] = parseInt(value, 10)
+          this._setNestedValue(envConfig, configKey, parseInt(value, 10))
         } else if (configKey === 'urls') {
           envConfig[configKey] = value.split(',').map((url) => url.trim())
+        } else if (configKey.includes('preloadNext')) {
+          this._setNestedValue(envConfig, configKey, value.toLowerCase() === 'true')
         } else {
-          envConfig[configKey] = value
+          this._setNestedValue(envConfig, configKey, value)
         }
       }
     }
 
     return envConfig
+  }
+
+  /**
+   * 设置嵌套配置值
+   * @param {Object} obj 目标对象
+   * @param {string} path 配置路径 (如: 'pagePool.autoThreshold.pws')
+   * @param {any} value 配置值
+   * @private
+   */
+  _setNestedValue(obj, path, value) {
+    const keys = path.split('.')
+    let current = obj
+    
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i]
+      if (!(key in current) || typeof current[key] !== 'object') {
+        current[key] = {}
+      }
+      current = current[key]
+    }
+    
+    current[keys[keys.length - 1]] = value
   }
 
   /**
@@ -195,6 +292,9 @@ export class ConfigManager {
       throw new Error('最小间隔时间不能大于最大间隔时间')
     }
 
+    // 🧠 Page Pool 2.0 配置验证
+    this._validatePagePoolConfig(config)
+
     // 验证并发数
     if (config.maxConcurrentRequests > 100) {
       const logger = this._getLogger()
@@ -202,6 +302,63 @@ export class ConfigManager {
         logger.warn('过高的并发数可能导致网站反爬虫限制')
       } else {
         console.warn('⚠️ 警告：过高的并发数可能导致网站反爬虫限制')
+      }
+    }
+  }
+
+  /**
+   * 🧠 验证Page Pool 2.0配置
+   * @param {Object} config 配置对象
+   * @private
+   */
+  _validatePagePoolConfig(config) {
+    // 验证页面池策略
+    if (!['auto', 'reuse', 'progressive'].includes(config.pagePoolStrategy)) {
+      throw new Error(`无效的页面池策略: ${config.pagePoolStrategy}`)
+    }
+
+    const pagePool = config.pagePool || {}
+
+    // 验证PWS权重
+    if (pagePool.pws && pagePool.pws.weights) {
+      const weights = pagePool.pws.weights
+      const weightSum = Object.values(weights).reduce((sum, w) => sum + w, 0)
+      
+      if (Math.abs(weightSum - 1.0) > 0.01) {
+        const logger = this._getLogger()
+        if (logger) {
+          logger.warn(`PWS权重总和不等于1.0 (当前: ${weightSum.toFixed(2)})，可能影响评分准确性`)
+        }
+      }
+    }
+
+    // 验证阈值配置
+    if (pagePool.autoThreshold) {
+      const { pws, freeMemPercent } = pagePool.autoThreshold
+      
+      if (pws !== undefined && (typeof pws !== 'number' || pws < 0)) {
+        throw new Error('PWS阈值必须是非负数')
+      }
+      
+      if (freeMemPercent !== undefined && (typeof freeMemPercent !== 'number' || freeMemPercent < 0 || freeMemPercent > 100)) {
+        throw new Error('内存阈值必须是0-100之间的数值')
+      }
+    }
+
+    // 验证reuse配置
+    if (pagePool.reuse) {
+      const { maxReuse, maxHeap, maxErrors } = pagePool.reuse
+      
+      if (maxReuse !== undefined && (typeof maxReuse !== 'number' || maxReuse < 1)) {
+        throw new Error('最大复用次数必须是正整数')
+      }
+      
+      if (maxHeap !== undefined && (typeof maxHeap !== 'number' || maxHeap < 10)) {
+        throw new Error('最大堆内存限制必须至少10MB')
+      }
+      
+      if (maxErrors !== undefined && (typeof maxErrors !== 'number' || maxErrors < 1)) {
+        throw new Error('最大错误次数必须是正整数')
       }
     }
   }
@@ -279,6 +436,14 @@ export class ConfigManager {
       logger.info(`  并发配置: ${this.config.maxConcurrentRequests}个并发`)
       logger.info(`  间隔配置: ${this.config.minIntervalMs}-${this.config.maxIntervalMs}ms`)
       logger.info(`  下载路径: ${this.config.downloadFolderPath || '自动生成'}`)
+      // 🧠 Page Pool 2.0 配置信息
+      logger.info(`  🧠 页面池策略: ${this.config.pagePoolStrategy}`)
+      if (this.config.pagePool) {
+        logger.info(`  🧠 PWS阈值: ${this.config.pagePool.autoThreshold?.pws || 50}`)
+        logger.info(`  🧠 内存阈值: ${this.config.pagePool.autoThreshold?.freeMemPercent || 25}%`)
+        logger.info(`  🧠 最大复用: ${this.config.pagePool.reuse?.maxReuse || 20}次`)
+        logger.info(`  🧠 预热功能: ${this.config.pagePool.progressive?.preloadNext ? '启用' : '禁用'}`)
+      }
     } else {
       console.log('📋 当前配置:')
       console.log('  提取模式:', this.config.extractMode)
@@ -289,6 +454,14 @@ export class ConfigManager {
       console.log('  并发配置:', `${this.config.maxConcurrentRequests}个并发`)
       console.log('  间隔配置:', `${this.config.minIntervalMs}-${this.config.maxIntervalMs}ms`)
       console.log('  下载路径:', this.config.downloadFolderPath || '自动生成')
+      // 🧠 Page Pool 2.0 配置信息
+      console.log('  🧠 页面池策略:', this.config.pagePoolStrategy)
+      if (this.config.pagePool) {
+        console.log('  🧠 PWS阈值:', this.config.pagePool.autoThreshold?.pws || 50)
+        console.log('  🧠 内存阈值:', `${this.config.pagePool.autoThreshold?.freeMemPercent || 25}%`)
+        console.log('  🧠 最大复用:', `${this.config.pagePool.reuse?.maxReuse || 20}次`)
+        console.log('  🧠 预热功能:', this.config.pagePool.progressive?.preloadNext ? '启用' : '禁用')
+      }
     }
   }
 
@@ -307,6 +480,17 @@ export class ConfigManager {
     envConfig.CRAWLER_MAX_INTERVAL = this.config.maxIntervalMs.toString()
     envConfig.CRAWLER_MIN_INTERVAL = this.config.minIntervalMs.toString()
     envConfig.CRAWLER_DOWNLOAD_PATH = this.config.downloadFolderPath
+    
+    // 🧠 Page Pool 2.0 环境变量
+    envConfig.CRAWLER_PAGE_POOL_STRATEGY = this.config.pagePoolStrategy
+    if (this.config.pagePool) {
+      envConfig.CRAWLER_PWS_THRESHOLD = (this.config.pagePool.autoThreshold?.pws || 50).toString()
+      envConfig.CRAWLER_MEM_THRESHOLD = (this.config.pagePool.autoThreshold?.freeMemPercent || 25).toString()
+      envConfig.CRAWLER_MAX_REUSE = (this.config.pagePool.reuse?.maxReuse || 20).toString()
+      envConfig.CRAWLER_MAX_HEAP = (this.config.pagePool.reuse?.maxHeap || 200).toString()
+      envConfig.CRAWLER_MAX_ERRORS = (this.config.pagePool.reuse?.maxErrors || 3).toString()
+      envConfig.CRAWLER_PRELOAD_NEXT = (this.config.pagePool.progressive?.preloadNext || true).toString()
+    }
 
     return envConfig
   }
