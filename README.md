@@ -6,6 +6,7 @@
 
 ✅ **智能图片提取**：自动识别和提取网页中的图片链接  
 ✅ **多种下载方式**：支持 Puppeteer 和 Axios 两种下载方式  
+✅ **智能Fallback机制**：Puppeteer下载失败时自动切换到Axios，提升成功率  
 ✅ **格式转换**：自动将 WebP 格式转换为 PNG  
 ✅ **防下载弹窗**：解决 Puppeteer 访问图片链接时的下载确认弹窗问题  
 ✅ **智能重试机制**：优雅的倒计时显示，避免日志刷屏  
@@ -31,6 +32,31 @@ node test-retry-countdown.js
 ```
 
 ## 重要特性
+
+### 🚀 智能Fallback机制
+
+当Puppeteer下载失败时，系统会自动切换到Axios进行下载，显著提升下载成功率：
+
+**工作原理：**
+- ✅ 优先使用Puppeteer下载（支持复杂页面渲染）
+- ✅ 检测各种失败场景：`net::ERR_ABORTED`、连接错误、超时等
+- ✅ 失败时自动fallback到Axios下载同一URL
+- ✅ 只有双重失败才记录为真正失败
+- ✅ 下一个URL仍优先使用Puppeteer，保持策略一致性
+
+**支持的错误类型：**
+```
+net::ERR_ABORTED                    // 连接中断
+net::ERR_CONNECTION_CLOSED          // 连接关闭  
+Navigation timeout exceeded         // 导航超时
+Could not load body for request     // 请求体加载失败
+```
+
+**测试验证：**
+```bash
+node test-puppeteer-axios-fallback.js  # 基础功能测试
+node test-fallback-specific.js         # 特定错误场景测试
+```
 
 ### 🔄 优雅的重试倒计时
 
