@@ -39,9 +39,10 @@ export class RetryCountdown {
             if (onComplete) {
               await onComplete()
             }
-          } catch (error) {
-            console.error('\n倒计时完成回调出错:', error)
-          }
+                } catch (error) {
+        // 倒计时完成回调出错 (这里无法访问logger实例)
+        process.stderr.write(`\n倒计时完成回调出错: ${error.message}\n`)
+      }
           
           resolve()
         } else {

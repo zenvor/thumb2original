@@ -172,8 +172,7 @@ export class ImageExtractor {
           function scroll() {
             // 如果超过最大已滚动距离或者停止滚动，就停止滚动，并执行回调函数
             if (currentScroll >= maxScroll || isStop) {
-              // 注意：这里在浏览器页面上下文中，只能使用浏览器原生console
-              console.log('自动滚动完成！')
+              // 自动滚动完成 (在页面上下文中无法使用logger)
               clearInterval(timer)
               return resolve()
             }
@@ -257,13 +256,7 @@ export class ImageExtractor {
       }
     }, protocolAndDomain)
 
-    // // 处理WebP格式的图片
-    // images.forEach((url) => {
-    //   if (url.includes('_webp')) {
-    //     const jpegUrl = url.replace('_webp', '')
-    //     images.push(jpegUrl)
-    //   }
-    // })
+
 
     // 使用 Set 去重
     images = Array.from(new Set(images))

@@ -342,9 +342,9 @@ export class Crawler {
       // 启动浏览器
       await this.startBrowser()
 
-      // 开始计时
+      // 🚀 启动统一的时间跟踪机制
       this.logger.info('开始计时')
-      this.logger.time('download time')
+      this.stateManager.timeTracker.start()
 
       switch (extractMode) {
         case 'singleSite':
@@ -370,9 +370,8 @@ export class Crawler {
           throw new Error(`未知的提取模式: ${extractMode}`)
       }
 
-      // 结束计时
-      this.logger.timeEnd('download time')
-      this.logger.info('计时结束')
+      // 🚀 计时在最终统计中显示，这里只记录流程结束
+      this.logger.info('爬虫流程结束')
     } catch (error) {
       this.logger.error('爬虫运行过程中出现错误', error)
       throw error
