@@ -25,7 +25,7 @@ export class ConfigManager {
       retriesCount: 5,
 
       // 最大并发请求数（每一轮）
-      maxConcurrentRequests: 30,
+      maxConcurrentRequests: 15,
 
       // 最大请求间隔时间（毫秒）
       maxIntervalMs: 1000,
@@ -38,7 +38,7 @@ export class ConfigManager {
 
       // 浏览器配置
       browser: {
-        headless: false,
+        headless: true,
         timeout: 300 * 1000,
         viewport: { width: 1800, height: 1000 },
       },
@@ -62,6 +62,9 @@ export class ConfigManager {
       // 进度条配置
       enableProgressBar: true, // 是否启用高颜值进度条
       progressUpdateFrequency: 'realtime', // 进度条更新频率 'realtime' | 'fast' | 'normal' | 'slow'
+
+      // 页面池管理策略 'auto' | 'reuse' | 'progressive'
+      pagePoolStrategy: 'auto', // auto: 根据图片数量自动选择, reuse: 复用式, progressive: 渐进式
     }
 
     // 合并配置

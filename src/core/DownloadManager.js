@@ -410,39 +410,79 @@ export class DownloadManager {
     const minIntervalMs = this.config.get('minIntervalMs')
     const maxIntervalMs = this.config.get('maxIntervalMs')
 
-    // 🚀 按需创建页面池：只为需要Puppeteer的请求创建页面
+    // 🧠 智能页面池策略选择
+    const pagePoolStrategy = this._selectPagePoolStrategy(imageUrls.length)
+    
+    if (pagePoolStrategy === 'reuse') {
+      // 复用式：一次性创建页面池，适合小规模下载
+      return this._downloadWithReuseStrategy(imageUrls, targetDownloadPath, stateManager, currentUrl, createPageFunc, maxConcurrentRequests, minIntervalMs, maxIntervalMs)
+    } else {
+      // 渐进式：分批创建和释放页面池，适合大规模下载
+      return this._downloadWithProgressiveStrategy(imageUrls, targetDownloadPath, stateManager, currentUrl, createPageFunc, maxConcurrentRequests, minIntervalMs, maxIntervalMs)
+    }
+  }
+
+  /**
+   * 🧠 选择页面池管理策略
+   * @param {number} imageCount 图片数量
+   * @returns {string} 'reuse' | 'progressive'
+   * @private
+   */
+  _selectPagePoolStrategy(imageCount) {
+    const strategy = this.config.get('pagePoolStrategy')
+    
+    if (strategy === 'reuse') return 'reuse'
+    if (strategy === 'progressive') return 'progressive'
+    
+    // auto模式：根据图片数量智能选择
+    if (imageCount <= 50) {
+      this.logger.debug(`🧠 智能策略：图片数量${imageCount}，选择复用式页面池（性能优先）`)
+      return 'reuse'
+    } else {
+      this.logger.debug(`🧠 智能策略：图片数量${imageCount}，选择渐进式页面池（内存优先）`)
+      return 'progressive'
+    }
+  }
+
+  /**
+   * 🏆 复用式页面池下载（性能优先）
+   * @param {Array} imageUrls 图片URL数组
+   * @param {string} targetDownloadPath 目标下载路径
+   * @param {Object} stateManager 状态管理器
+   * @param {string} currentUrl 当前页面URL
+   * @param {Function} createPageFunc 创建页面的函数
+   * @param {number} maxConcurrentRequests 最大并发请求数
+   * @param {number} minIntervalMs 最小间隔
+   * @param {number} maxIntervalMs 最大间隔
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _downloadWithReuseStrategy(imageUrls, targetDownloadPath, stateManager, currentUrl, createPageFunc, maxConcurrentRequests, minIntervalMs, maxIntervalMs) {
+    // 🏆 一次性创建页面池，后续批次复用
     const pagePool = await this._createOnDemandPagePool(imageUrls, currentUrl, maxConcurrentRequests, createPageFunc)
 
     // 随机请求间隔（毫秒）
     let randomInterval = 0
-    // 请求的开始时间（每一轮）
     let startTime = 0
-    // 请求的结束时间（每一轮）
     let endTime = 0
-
-    // 页面池索引，用于循环复用页面
     let pagePoolIndex = 0
 
-    this.logger.debug(`按需页面池大小：${pagePool.length}，图片总数：${imageUrls.length}`)
+    this.logger.debug(`🏆 复用式页面池大小：${pagePool.length}，图片总数：${imageUrls.length}`)
 
     try {
-      /* 随机化请求间隔：为了更好地模拟真实用户的行为，在请求之间添加随机的时间间隔，
-        而不是固定的间隔。这可以减少模式化的请求，降低被识别为爬虫的概率。 */
       for (let i = 0; i < imageUrls.length; i += maxConcurrentRequests) {
         const batchUrls = imageUrls.slice(i, i + maxConcurrentRequests)
+        
         const timeRemaining = randomInterval - (endTime - startTime)
         if (timeRemaining > 0) {
           randomInterval = timeRemaining
-          // 设置请求间隔：在发送连续请求之间添加固定的时间间隔，以减缓请求的频率。
           await new Promise((resolve) => setTimeout(resolve, randomInterval))
         }
-        // 请求的开始时间（每一轮）
         startTime = Date.now() % 10000
 
         await Promise.all(
           batchUrls.map(async (imageUrl) => {
             if (this._shouldUsePuppeteer(imageUrl, currentUrl)) {
-              // 使用页面池中的页面，循环复用
               if (pagePool.length === 0) {
                 throw new Error('需要使用Puppeteer但页面池为空')
               }
@@ -455,6 +495,90 @@ export class DownloadManager {
           })
         )
 
+        endTime = Date.now() % 10000
+        randomInterval = this._generateRandomInterval(minIntervalMs, maxIntervalMs)
+      }
+    } catch (error) {
+      this.logger.error('复用式下载过程中出现错误', error)
+      throw error
+    } finally {
+      // 最后一次性关闭所有页面
+      await this.closePagePool(pagePool)
+    }
+  }
+
+  /**
+   * 🧠 渐进式页面池下载（内存优先）
+   * @param {Array} imageUrls 图片URL数组
+   * @param {string} targetDownloadPath 目标下载路径
+   * @param {Object} stateManager 状态管理器
+   * @param {string} currentUrl 当前页面URL
+   * @param {Function} createPageFunc 创建页面的函数
+   * @param {number} maxConcurrentRequests 最大并发请求数
+   * @param {number} minIntervalMs 最小间隔
+   * @param {number} maxIntervalMs 最大间隔
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _downloadWithProgressiveStrategy(imageUrls, targetDownloadPath, stateManager, currentUrl, createPageFunc, maxConcurrentRequests, minIntervalMs, maxIntervalMs) {
+    const totalBatches = Math.ceil(imageUrls.length / maxConcurrentRequests)
+    let globalPagePool = []
+
+    // 随机请求间隔（毫秒）
+    let randomInterval = 0
+    // 请求的开始时间（每一轮）
+    let startTime = 0
+    // 请求的结束时间（每一轮）
+    let endTime = 0
+
+    this.logger.debug(`总批次数：${totalBatches}，图片总数：${imageUrls.length}`)
+
+    try {
+      /* 随机化请求间隔：为了更好地模拟真实用户的行为，在请求之间添加随机的时间间隔，
+        而不是固定的间隔。这可以减少模式化的请求，降低被识别为爬虫的概率。 */
+      for (let i = 0; i < imageUrls.length; i += maxConcurrentRequests) {
+        const batchUrls = imageUrls.slice(i, i + maxConcurrentRequests)
+        const batchIndex = Math.floor(i / maxConcurrentRequests) + 1
+        
+        // 🧠 为当前批次按需创建页面池
+        const batchPagePool = await this._createBatchPagePool(batchUrls, currentUrl, createPageFunc)
+        globalPagePool.push(...batchPagePool)
+        
+        const timeRemaining = randomInterval - (endTime - startTime)
+        if (timeRemaining > 0) {
+          randomInterval = timeRemaining
+          // 设置请求间隔：在发送连续请求之间添加固定的时间间隔，以减缓请求的频率。
+          await new Promise((resolve) => setTimeout(resolve, randomInterval))
+        }
+        // 请求的开始时间（每一轮）
+        startTime = Date.now() % 10000
+
+        // 页面池索引，用于当前批次的页面分配
+        let batchPageIndex = 0
+
+        await Promise.all(
+          batchUrls.map(async (imageUrl) => {
+            if (this._shouldUsePuppeteer(imageUrl, currentUrl)) {
+              // 使用当前批次的页面池
+              if (batchPagePool.length === 0) {
+                throw new Error('需要使用Puppeteer但当前批次页面池为空')
+              }
+              const page = batchPagePool[batchPageIndex % batchPagePool.length]
+              batchPageIndex++
+              return this.downloadWithPuppeteer(page, imageUrl, stateManager, targetDownloadPath)
+            } else {
+              return this.downloadWithAxios(imageUrl, stateManager, targetDownloadPath)
+            }
+          })
+        )
+
+        // 🧠 内存优化：批次完成后立即释放页面，而不是等到全部完成
+        if (batchPagePool.length > 0) {
+          await this._closeBatchPages(batchPagePool, batchIndex, totalBatches)
+          // 从全局页面池中移除已关闭的页面
+          globalPagePool = globalPagePool.filter(page => !page.isClosed())
+        }
+
         // 请求的结束时间（每一轮）
         endTime = Date.now() % 10000
         // 随机生成请求间隔
@@ -464,9 +588,85 @@ export class DownloadManager {
       this.logger.error('批量下载过程中出现错误', error)
       throw error
     } finally {
-      // 安全地关闭页面池中的所有页面
-      await this.closePagePool(pagePool)
+      // 🧠 最终清理：确保所有剩余页面都被关闭
+      const remainingPages = globalPagePool.filter(page => !page.isClosed())
+      if (remainingPages.length > 0) {
+        this.logger.debug(`最终清理：关闭剩余的 ${remainingPages.length} 个页面`)
+        await this.closePagePool(remainingPages)
+      }
     }
+  }
+
+  /**
+   * 🧠 为单个批次创建页面池（内存优化）
+   * @param {Array} batchUrls 当前批次的URL数组
+   * @param {string} currentUrl 当前页面URL
+   * @param {Function} createPageFunc 创建页面的函数
+   * @returns {Promise<Array>} 当前批次的页面池
+   * @private
+   */
+  async _createBatchPagePool(batchUrls, currentUrl, createPageFunc) {
+    // 计算当前批次需要的页面数量
+    let puppeteerCount = 0
+    for (const imageUrl of batchUrls) {
+      if (this._shouldUsePuppeteer(imageUrl, currentUrl)) {
+        puppeteerCount++
+      }
+    }
+
+    if (puppeteerCount === 0) {
+      this.logger.debug('当前批次全部使用axios，无需创建页面')
+      return []
+    }
+
+    this.logger.debug(`当前批次需要 ${puppeteerCount} 个页面`)
+
+    // 并行创建页面
+    const startTime = Date.now()
+    const pageCreationPromises = Array.from({ length: puppeteerCount }, () => createPageFunc())
+
+    try {
+      const pages = await Promise.all(pageCreationPromises)
+      const creationTime = Date.now() - startTime
+      this.logger.debug(`批次页面池创建完成，用时 ${creationTime}ms`)
+      return pages
+    } catch (error) {
+      this.logger.debug('批次页面池创建失败', error)
+      throw error
+    }
+  }
+
+  /**
+   * 🧠 关闭批次页面（内存优化）
+   * @param {Array} batchPagePool 批次页面池
+   * @param {number} batchIndex 当前批次索引
+   * @param {number} totalBatches 总批次数
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _closeBatchPages(batchPagePool, batchIndex, totalBatches) {
+    if (!batchPagePool || batchPagePool.length === 0) {
+      return
+    }
+
+    this.logger.debug(`🧠 内存优化：批次 ${batchIndex}/${totalBatches} 完成，立即释放 ${batchPagePool.length} 个页面`)
+
+    const closePromises = batchPagePool.map(async (page, index) => {
+      try {
+        if (page && !page.isClosed()) {
+          await page.close()
+          this.logger.debug(`批次页面 ${index + 1} 已释放`)
+        }
+      } catch (error) {
+        this.logger.debug(`关闭批次页面 ${index + 1} 时出错:`, error.message)
+      }
+    })
+
+    await Promise.allSettled(closePromises)
+    
+    // 短暂延迟确保页面完全释放
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    this.logger.debug(`批次 ${batchIndex} 页面池已完全释放`)
   }
 
   /**
