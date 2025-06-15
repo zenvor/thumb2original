@@ -241,60 +241,63 @@ export class ImageExtractor {
   }
 
   /**
-   * 向下滚动页面
+   * 向下滚动页面，支持无限滚动加载 (优化版)
    * @param {object} page Puppeteer页面对象
    * @returns {Promise<void>}
    */
   async scrollPage(page) {
-    const scrollConfig = this.config.scroll || {}
+    // 提取滚动配置，并提供合理的默认值
+    const {
+      stepSize = 100, // 每次滚动的步长（像素）
+      interval = 100, // 尝试滚动的间隔（毫秒）
+      stopTimeout = 2000, // 滚动停止后，等待新内容加载的超时时间（毫秒）
+      maxDistance = Infinity, // 允许滚动的最大距离
+    } = this.config.scroll || {}
 
-    await page.evaluate(async (scrollOptions) => {
-      // 异步滚动函数，接受一个参数：最大已滚动距离
-      async function autoScroll(maxScroll, timeout = 3000) {
-        return new Promise((resolve) => {
-          let lastScrollTime = Date.now() // 记录最后一次滚动的时间
-          window.onscroll = () => {
-            // 监听滚动事件
-            lastScrollTime = Date.now() // 更新最后一次滚动的时间
-            // 如果还在滚动，就更新最后一次滚动的时间，并设置停止标志为假
-            isStop = false
-          }
-          // 获取当前已滚动的距离
-          let currentScroll = window.scrollY
-          // 设置一个标志，表示是否停止滚动
-          let isStop = false
-          // 设置一个计时器，用于检测滚动停留时间
-          let timer = null
-          // 定义一个内部函数，用于执行滚动操作
-          function scroll() {
-            // 如果超过最大已滚动距离或者停止滚动，就停止滚动，并执行回调函数
-            if (currentScroll >= maxScroll || isStop) {
-              // 自动滚动完成 (在页面上下文中无法使用logger)
+    await page.evaluate(
+      async (options) => {
+        await new Promise((resolve) => {
+          // 记录最后一次有效滚动的时间戳
+          let lastScrollTime = Date.now()
+
+          // 监听'scroll'事件。这是处理“无限滚动”的关键。
+          // 只要页面因新内容加载而继续滚动，此时间戳就会被更新。
+          window.addEventListener(
+            'scroll',
+            () => {
+              lastScrollTime = Date.now()
+            },
+            { passive: true }
+          ) // 使用 passive 监听器提升滚动性能
+
+          const timer = setInterval(() => {
+            // --- 停止条件检查 ---
+
+            // 条件1: 滚动距离已达到设定的最大值
+            if (window.scrollY >= options.maxDistance) {
               clearInterval(timer)
-              return resolve()
+              resolve()
+              return
             }
-            // 每次滚动一定的像素
-            window.scrollBy(0, scrollOptions.stepSize)
-            // 更新已滚动的距离
-            currentScroll = window.scrollY
-            // 检测是否停止滚动
-            if (Date.now() - lastScrollTime > timeout) {
-              // 如果超时没有滚动，就设置停止标志为真
-              isStop = true
+
+            // 条件2: 距离上次有效滚动已经过去太久
+            // 当滚动到底部时，'scroll'事件不再触发，lastScrollTime会停止更新。
+            // 如果在`stopTimeout`这么长的时间内它都没更新，我们就认为没有新内容加载了，可以结束。
+            if (Date.now() - lastScrollTime > options.stopTimeout) {
+              clearInterval(timer)
+              resolve()
+              return
             }
-            // 设置一个定时器，继续滚动
-            timer = setTimeout(scroll, 100)
-          }
-          // 调用内部函数开始滚动
-          scroll()
+
+            // --- 执行滚动 ---
+            // 持续尝试向下滚动，以触发新内容的加载
+            window.scrollBy(0, options.stepSize)
+          }, options.interval)
         })
-      }
-
-      // 调用异步函数，传入配置的最大已滚动距离
-      await autoScroll(scrollOptions.maxDistance, scrollOptions.stopTimeout)
-    }, scrollConfig)
+      },
+      { stepSize, interval, stopTimeout, maxDistance }
+    ) // 将配置项传入页面
   }
-
   /**
    * 查找页面中的图像
    * @param {object} page Puppeteer页面对象
