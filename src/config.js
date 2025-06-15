@@ -7,7 +7,7 @@ const config = {
   // auto: 智能选择（默认，保持原有逻辑）
   // axios: 强制使用Axios下载所有图片
   // puppeteer-priority: 优先使用Puppeteer，失败时fallback到Axios（推荐）
-  downloadMethod: 'auto',
+  downloadMethod: 'axios',
   // 目标解析网站
   // url: 'https://www.duitang.com/blog/?id=1507598814',
   url: 'https://www.duitang.com/category/?cat=wallpaper',
