@@ -1,12 +1,8 @@
 import puppeteer from 'puppeteer'
-import { ConfigManager } from './ConfigManager.js'
+import { config as defaultConfig } from '../config.js'
 import { ConsolaLogger as Logger } from '../logger/ConsolaLogger.js'
 import { ImageExtractor } from './ImageExtractor.js'
-import { DownloadManager } from './DownloadManager.js'
-
-// 导入工具类
-import { DownloadStateManager } from '../utils/download/DownloadStateManager.js'
-import { RetryCountdown } from '../utils/RetryCountdown.js'
+import { DownloadManager, DownloadProgress } from './download/index.js'
 
 /**
  * 主爬虫类（重构后）
@@ -14,11 +10,11 @@ import { RetryCountdown } from '../utils/RetryCountdown.js'
  */
 export class Crawler {
   constructor(userConfig = {}) {
-    // 初始化配置管理器
-    this.config = new ConfigManager(userConfig)
+    // 合并配置 - 用户配置覆盖默认配置
+    this.config = this._mergeConfig(defaultConfig, userConfig)
 
     // 从配置中获取日志级别，如果没有配置则使用默认值 'info'
-    const logLevel = this.config.get('logLevel') || 'info'
+    const logLevel = this.config.logLevel || 'info'
 
     // 初始化全局日志器实例（供工具类使用）
     Logger.createGlobal({ level: logLevel })
@@ -38,13 +34,11 @@ export class Crawler {
     // 全局浏览器实例
     this.browser = null
 
-    // 状态管理器（传入日志器支持进度条）
-    const enableProgressBar = this.config.get('enableProgressBar')
-    const progressUpdateFrequency = this.config.get('progressUpdateFrequency') || 'realtime'
-    this.stateManager = new DownloadStateManager({
+    // 🚀 简化的进度管理器（KISS重构后）
+    const enableProgressBar = this.config.enableProgressBar
+    this.progressManager = new DownloadProgress({
       enableProgressBar,
-      logger: this.logger.child('Progress'),
-      updateFrequency: progressUpdateFrequency
+      logger: this.logger.child('Progress')
     })
 
     // 全局resolve处理器
@@ -52,25 +46,87 @@ export class Crawler {
   }
 
   /**
+   * 深度合并配置对象
+   * @param {Object} defaultConfig 默认配置
+   * @param {Object} userConfig 用户配置
+   * @returns {Object} 合并后的配置
+   * @private
+   */
+  _mergeConfig(defaultConfig, userConfig) {
+    const merged = { ...defaultConfig }
+
+    // 深度合并嵌套对象
+    for (const key in userConfig) {
+      if (userConfig[key] !== null && typeof userConfig[key] === 'object' && !Array.isArray(userConfig[key])) {
+        merged[key] = this._deepMerge(defaultConfig[key] || {}, userConfig[key])
+      } else {
+        merged[key] = userConfig[key]
+      }
+    }
+
+    return merged
+  }
+
+  /**
+   * 深度合并对象（支持嵌套配置）
+   * @param {Object} target 目标对象
+   * @param {Object} source 源对象
+   * @returns {Object} 合并后的对象
+   * @private
+   */
+  _deepMerge(target, source) {
+    const result = { ...target }
+    
+    for (const key in source) {
+      if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+        result[key] = this._deepMerge(target[key] || {}, source[key])
+      } else {
+        result[key] = source[key]
+      }
+    }
+    
+    return result
+  }
+
+  /**
    * 启动浏览器
    * @returns {Promise<void>}
    */
   async startBrowser() {
-    const browserConfig = this.config.get('browser')
+    const browserConfig = this.config.browser
 
     this.browser = await puppeteer.launch({
       headless: browserConfig.headless,
       timeout: browserConfig.timeout,
-      // 精简的启动参数，只保留必要的防下载设置
+      // 🛡️ 完整的防下载启动参数 - 三层防护体系第一层
       args: [
         '--no-sandbox', // 无沙盒模式（安全性要求）
         '--disable-web-security', // 禁用网络安全检查
+        
+        // 🔒 核心防下载参数
         '--disable-background-downloads', // 禁用后台下载
+        '--disable-downloads', // 完全禁用下载功能
         '--disable-download-notification', // 禁用下载通知
+        '--disable-save-password-bubble', // 禁用保存密码提示
+        '--disable-plugins', // 禁用插件
+        '--disable-extensions', // 禁用扩展
+        '--disable-print-preview', // 禁用打印预览
+        '--disable-component-update', // 禁用组件更新
+        
+        // 🚫 防止各种弹窗和确认对话框
         '--no-default-browser-check', // 不检查默认浏览器
         '--no-first-run', // 不运行首次运行流程
         '--disable-prompt-on-repost', // 禁用重新提交提示
         '--disable-popup-blocking', // 禁用弹出阻止（某些网站需要）
+        '--disable-translate', // 禁用翻译
+        '--disable-sync', // 禁用同步
+        '--disable-background-timer-throttling', // 禁用后台定时器限制
+        '--disable-renderer-backgrounding', // 禁用渲染器后台化
+        '--disable-backgrounding-occluded-windows', // 禁用被遮挡窗口的后台化
+        '--disable-client-side-phishing-detection', // 禁用客户端钓鱼检测
+        '--disable-default-apps', // 禁用默认应用
+        '--disable-hang-monitor', // 禁用挂起监视器
+        '--disable-ipc-flooding-protection', // 禁用IPC洪泛保护
       ],
       defaultViewport: null,
     })
@@ -97,9 +153,9 @@ export class Crawler {
       this.logger.debug(`浏览器中总页面数: ${allPages.length}，仍需关闭的页面数: ${openPages.length}`)
 
       if (openPages.length === 0) {
-        this.logger.debug('所有页面已关闭，直接关闭浏览器')
+        this.logger.debug('所有页面已关闭，立即关闭浏览器')
         await this.browser.close()
-        this.logger.info('浏览器已优雅关闭')
+        this.logger.info('浏览器已立即关闭')
         return
       }
 
@@ -135,13 +191,14 @@ export class Crawler {
       // 等待所有页面关闭完成
       await Promise.allSettled(closePromises)
 
-      // 强制关闭浏览器
+      // 立即关闭浏览器
+      this.logger.debug('所有页面已关闭，立即关闭浏览器')
       await this.browser.close()
-      this.logger.info('浏览器已优雅关闭')
+      this.logger.info('浏览器已立即关闭')
     } catch (error) {
-      this.logger.warn('优雅关闭浏览器失败，尝试强制关闭：', error)
+      this.logger.warn('关闭浏览器失败，尝试强制关闭：', error)
       try {
-        // 强制关闭
+        // 立即强制关闭
         await this.browser.close()
       } catch (forceError) {
         this.logger.error('强制关闭浏览器也失败：', forceError)
@@ -179,7 +236,7 @@ export class Crawler {
 
       // 4. 根据下载模式处理图片URLs
       let imageUrls = images
-      const downloadMode = this.config.get('downloadMode')
+      const downloadMode = this.config.downloadMode
 
       if (downloadMode === 'downloadOriginImagesByThumbnails') {
         imageUrls = await this.imageExtractor.getOriginalImageUrls(page, images)
@@ -215,9 +272,9 @@ export class Crawler {
     return new Promise(async (resolve) => {
       this.globalResolveHandler = resolve
 
-      // 重置状态管理器
-      this.stateManager.reset()
-      this.stateManager.setTotalImages(imageUrls.length)
+      // 🚀 重置进度管理器（KISS重构后）
+      this.progressManager.reset()
+      this.progressManager.init(imageUrls.length)
 
       // 清空下载管理器的失败列表
       this.downloadManager.clearFailedImages()
@@ -247,8 +304,8 @@ export class Crawler {
     }
 
     try {
-      // 执行批量下载（页面池将在 DownloadManager 内部按需创建和管理）
-      await this.downloadManager.downloadBatch(imageUrls, targetDownloadPath, this.stateManager, currentUrl, createPageFunc)
+      // 🚀 执行批量下载（KISS重构后的简化接口）
+      await this.downloadManager.downloadBatch(imageUrls, targetDownloadPath, this.progressManager, currentUrl, createPageFunc)
 
       // 下载完成后的处理
       this.handleDownloadComplete(targetDownloadPath, currentUrl, retryCount)
@@ -285,8 +342,8 @@ export class Crawler {
    * @param {number} currentRetryCount 当前重试次数
    */
   async executeRetry(failedImages, targetDownloadPath, currentUrl, currentRetryCount) {
-    const maxRetries = this.config.get('retriesCount')
-    const retryInterval = this.config.get('retryInterval')
+    const maxRetries = this.config.retriesCount
+    const retryInterval = this.config.retryInterval
 
     // 检查是否达到最大重试次数
     if (currentRetryCount >= maxRetries) {
@@ -297,15 +354,15 @@ export class Crawler {
 
     this.logger.warn(`${failedImages.length} 张图片下载失败，${retryInterval}秒后开始重试`)
 
+    // 🚀 简化重试逻辑（KISS重构后）
+    this.logger.info(`🔄 开始第${currentRetryCount + 1}/${maxRetries}次重试...`)
+    
     try {
-      // 使用RetryCountdown工具类进行优雅的倒计时显示
-      await RetryCountdown.countdown(retryInterval, async () => {
-        // 执行重试
-        await this.performDownload(failedImages, currentRetryCount + 1)
-      }, {
-        prefix: `🔄 重试倒计时 (第${currentRetryCount + 1}/${maxRetries}次)`,
-        color: '\x1b[33m' // 黄色
-      })
+      // 简单的等待时间
+      await new Promise(resolve => setTimeout(resolve, retryInterval * 1000))
+      
+      // 执行重试
+      await this.performDownload(failedImages, currentRetryCount + 1)
     } catch (error) {
       this.logger.error('重试过程中出现错误', error)
       this.finishDownload()
@@ -316,11 +373,11 @@ export class Crawler {
    * 完成下载流程
    */
   finishDownload() {
-    // 使用状态管理器显示最终结果（内部会根据进度条模式自动选择显示方式）
-    this.stateManager.finishDownload()
+    // 🚀 使用简化的进度管理器显示最终结果（KISS重构后）
+    this.progressManager.finish()
 
     // 重置所有状态
-    this.stateManager.reset()
+    this.progressManager.reset()
     this.downloadManager.clearFailedImages()
 
     this.logger.info('下载流程完成')
@@ -336,19 +393,18 @@ export class Crawler {
    * @returns {Promise<void>}
    */
   async run() {
-    const extractMode = this.config.get('extractMode')
+    const extractMode = this.config.extractMode
 
     try {
       // 启动浏览器
       await this.startBrowser()
 
-      // 🚀 启动统一的时间跟踪机制
+      // 🚀 简化的时间跟踪（KISS重构后）
       this.logger.info('开始计时')
-      this.stateManager.timeTracker.start()
 
       switch (extractMode) {
         case 'singleSite':
-          const url = this.config.get('url')
+          const url = this.config.url
           if (!url) {
             throw new Error('单站点模式下必须提供URL')
           }
@@ -356,7 +412,7 @@ export class Crawler {
           break
 
         case 'multipleSites':
-          const urls = this.config.get('urls')
+          const urls = this.config.urls
           if (!urls || urls.length === 0) {
             throw new Error('多站点模式下必须提供URLs数组')
           }
@@ -387,7 +443,7 @@ export class Crawler {
    * @param {any} value 配置值
    */
   setConfig(key, value) {
-    this.config.set(key, value)
+    this.config[key] = value
   }
 
   /**
@@ -396,7 +452,7 @@ export class Crawler {
    * @returns {any} 配置值
    */
   getConfig(key) {
-    return this.config.get(key)
+    return this.config[key]
   }
 
   /**
@@ -424,7 +480,7 @@ export class Crawler {
    * 调试配置信息
    */
   debugConfig() {
-    this.config.debug()
+    console.log(JSON.stringify(this.config, null, 2))
   }
 
   /**
@@ -433,8 +489,12 @@ export class Crawler {
    * @returns {Promise<Crawler>} 爬虫实例
    */
   static async fromConfigFile(configPath) {
-    const configManager = await ConfigManager.fromFile(configPath)
-    return new Crawler(configManager.getAll())
+    try {
+      const { config } = await import(configPath)
+      return new Crawler(config)
+    } catch (error) {
+      throw new Error(`无法加载配置文件 ${configPath}: ${error.message}`)
+    }
   }
 
   /**

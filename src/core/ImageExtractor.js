@@ -1,4 +1,3 @@
-import { parseUrl } from '../utils/url/parseUrl.js'
 import { validateAndModifyFileName } from '../utils/file/validateAndModifyFileName.js'
 import path from 'path'
 import fs from 'fs'
@@ -15,6 +14,8 @@ export class ImageExtractor {
     this.title = ''
     this.currentUrl = ''
     this.targetDownloadFolderPath = ''
+    // 用于控制下载行为设置日志的显示
+    this._downloadBehaviorLogged = false
   }
 
   /**
@@ -39,7 +40,7 @@ export class ImageExtractor {
       const page = await this.browser.newPage()
 
       // 设置标准视口大小
-      await page.setViewport(this.config.get('browser.viewport'))
+      await page.setViewport(this.config.browser?.viewport || { width: 1920, height: 1080 })
 
       // 根据需要设置请求头
       if (setReferer) {
@@ -48,7 +49,51 @@ export class ImageExtractor {
         })
       }
 
-      // 仅在文档级别防止下载对话框，不影响正常请求
+      // 🛡️ 三层防护体系第二层：页面级防下载设置
+      try {
+        // 使用Chrome DevTools Protocol正确设置页面下载行为
+        const client = await page.target().createCDPSession()
+        await client.send('Page.setDownloadBehavior', {
+          behavior: 'deny',
+        })
+        // 只在第一次设置时显示信息，避免重复日志
+        if (!this._downloadBehaviorLogged) {
+          this.logger.info('🛡️ 页面下载行为已设置为拒绝（后续页面创建将静默设置）')
+          this._downloadBehaviorLogged = true
+        }
+      } catch (error) {
+        // 如果设置失败，记录debug信息但不影响程序继续执行
+        this.logger.debug('设置页面下载行为失败（可能浏览器版本不支持）:', error.message)
+      }
+
+      // 🔥 关键修复：启用请求拦截以阻止直接下载
+      await page.setRequestInterception(true)
+      page.on('request', (request) => {
+        const url = request.url()
+        const resourceType = request.resourceType()
+
+        // 允许图片请求，但阻止可能触发下载的请求
+        if (resourceType === 'image') {
+          // 检查是否是直接触发下载的图片请求
+          const headers = request.headers()
+          if (headers['content-disposition'] && headers['content-disposition'].includes('attachment')) {
+            this.logger.debug('阻止下载触发的图片请求:', url)
+            request.abort()
+            return
+          }
+          // 正常的图片请求继续
+          request.continue()
+        } else if (resourceType === 'document' && url.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff)$/i)) {
+          // 阻止作为文档加载的图片（这通常会触发下载）
+          this.logger.debug('阻止作为文档的图片请求:', url)
+          request.abort()
+        } else {
+          // 其他请求正常继续
+          request.continue()
+        }
+      })
+
+      // 🛡️ 三层防护体系第三层：文档级防下载脚本
       await page.evaluateOnNewDocument(() => {
         // 阻止默认的下载行为，但不影响图片加载
         Object.defineProperty(HTMLAnchorElement.prototype, 'download', {
@@ -60,11 +105,63 @@ export class ImageExtractor {
           },
         })
 
-        // 阻止文件下载确认对话框
-        window.addEventListener('beforeunload', (e) => {
-          e.preventDefault()
-          e.returnValue = ''
+        // 阻止location.href的下载触发
+        const originalHref = Object.getOwnPropertyDescriptor(Location.prototype, 'href')
+        Object.defineProperty(Location.prototype, 'href', {
+          get: originalHref.get,
+          set: function (value) {
+            // 检查是否是下载链接
+            if (
+              typeof value === 'string' &&
+              (value.startsWith('blob:') ||
+                value.includes('download=') ||
+                value.match(/\.(zip|rar|exe|msi|dmg|pkg|tar|gz|7z|pdf|doc|docx|xls|xlsx)$/i))
+            ) {
+              console.warn('阻止下载链接:', value)
+              return false
+            }
+            return originalHref.set.call(this, value)
+          },
+          configurable: true,
         })
+
+        // 阻止文件下载确认对话框
+        window
+          .addEventListener('beforeunload', (e) => {
+            e.preventDefault()
+            e.returnValue = ''
+          })
+
+          [
+            // 阻止下载相关事件
+            ('click', 'contextmenu')
+          ].forEach((eventType) => {
+            document.addEventListener(
+              eventType,
+              (e) => {
+                const target = e.target
+                if (target && target.tagName === 'A') {
+                  const href = target.getAttribute('href')
+                  const download = target.getAttribute('download')
+
+                  // 如果是下载链接，阻止默认行为
+                  if (
+                    download !== null ||
+                    (href &&
+                      (href.startsWith('blob:') ||
+                        href.includes('download=') ||
+                        href.match(/\.(zip|rar|exe|msi|dmg|pkg|tar|gz|7z|pdf|doc|docx|xls|xlsx)$/i)))
+                  ) {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    console.warn('阻止下载链接点击:', href)
+                    return false
+                  }
+                }
+              },
+              true
+            )
+          })
       })
 
       return page
@@ -81,7 +178,7 @@ export class ImageExtractor {
    */
   setTargetDownloadPath() {
     try {
-      const downloadFolderPath = this.config.get('downloadFolderPath')
+      const downloadFolderPath = this.config.downloadFolderPath
       const rootDownloadDir = 'download'
 
       // 确保根下载目录 'download' 存在
@@ -121,7 +218,7 @@ export class ImageExtractor {
 
     try {
       // 设置访问图像的超时时间
-      const timeoutMilliseconds = this.config.get('timeouts.pageLoad')
+      const timeoutMilliseconds = this.config.timeouts?.pageLoad || 30000
 
       // 导航到您想要获取HTML的网址
       await page.goto(this.currentUrl, {
@@ -149,7 +246,7 @@ export class ImageExtractor {
    * @returns {Promise<void>}
    */
   async scrollPage(page) {
-    const scrollConfig = this.config.get('scroll')
+    const scrollConfig = this.config.scroll || {}
 
     await page.evaluate(async (scrollOptions) => {
       // 异步滚动函数，接受一个参数：最大已滚动距离
@@ -207,9 +304,10 @@ export class ImageExtractor {
     // 设置下载文件夹路径
     this.setTargetDownloadPath()
 
-    const { protocolAndDomain } = parseUrl(this.currentUrl)
+    // 使用标准 URL 构造函数提取 origin
+    const origin = new URL(this.currentUrl).origin
 
-    let images = await page.evaluate((protocolAndDomain) => {
+    let images = await page.evaluate((origin) => {
       const elementArray = ['a', 'img', 'svg', 'use', 'meta', 'link', 'figure']
 
       const elements = Array.from(document.querySelectorAll('img')) // 获取所有的 a 和 img 元素
@@ -219,25 +317,25 @@ export class ImageExtractor {
             let url = element.getAttribute('href')
             if (!url) return null
 
-            url = handleImageUrl(url, protocolAndDomain)
+            url = handleImageUrl(url, origin)
             if (isImageUrl(url)) return url
           } else if (element.tagName === 'IMG') {
             let url = element.getAttribute('src')
             if (!url) return null
 
-            url = handleImageUrl(url, protocolAndDomain)
+            url = handleImageUrl(url, origin)
             return url
           }
           return null // 返回 null 表示不是图像链接
         })
         .filter((url) => url != null)
 
-      function handleImageUrl(url, protocolAndDomain) {
-        if (protocolAndDomain.includes('http://asiantgp.net')) {
+      function handleImageUrl(url, origin) {
+        if (origin.includes('http://asiantgp.net')) {
           const prefix = 'http://asiantgp.net/gallery/Japanese_cute_young_wife_Haruka'
           return prefix + '/' + url
         } else if (!url.startsWith('http')) {
-          return (url = `${protocolAndDomain}` + url)
+          return (url = `${origin}` + url)
         } else {
           return url
         }
@@ -254,9 +352,7 @@ export class ImageExtractor {
         // 调用test()方法，检查url是否符合正则表达式
         return regex.test(url)
       }
-    }, protocolAndDomain)
-
-
+    }, origin)
 
     // 使用 Set 去重
     images = Array.from(new Set(images))
@@ -310,7 +406,7 @@ export class ImageExtractor {
       })
     } else if (currentUrl.includes('https://chpic.su')) {
       // 处理 chpic.su 的情况 - 使用工具函数生成原图URL
-      const { generateOriginalImageUrl } = await import('../utils/image/generateOriginalImageUrl.js')
+      const { generateOriginalImageUrl } = await import('./image/generateOriginalImageUrl.js')
 
       originalImageUrls = thumbnailImages
         .map((imageUrl) => generateOriginalImageUrl(imageUrl, 'transparent'))
@@ -335,7 +431,7 @@ export class ImageExtractor {
       }, currentUrl)
     } else {
       // 默认情况：使用工具函数生成原图URL
-      const { generateOriginalImageUrl } = await import('../utils/image/generateOriginalImageUrl.js')
+      const { generateOriginalImageUrl } = await import('./image/generateOriginalImageUrl.js')
 
       originalImageUrls = thumbnailImages
         .map((imageUrl) => generateOriginalImageUrl(imageUrl))
