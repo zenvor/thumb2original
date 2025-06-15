@@ -1,4 +1,12 @@
 import { validateAndModifyFileName } from '../utils/file/validateAndModifyFileName.js'
+import {
+  EroticBeautiesStrategy,
+  AlsasianPornStrategy,
+  TargetBlankStrategy,
+  ChpicSuStrategy,
+  RestrictedSiteStrategy,
+  DefaultImageStrategy
+} from './image/ImageExtractionStrategies.js'
 import path from 'path'
 import fs from 'fs'
 
@@ -418,77 +426,56 @@ export class ImageExtractor {
     const currentUrl = this.currentUrl
     let originalImageUrls = []
 
-    if (currentUrl.includes('https://www.eroticbeauties.net')) {
-      // 使用 page.evaluate 方法在页面上下文中执行 JavaScript 代码
-      originalImageUrls = await page.evaluate(() => {
-        const spans = Array.from(document.querySelectorAll('span.jpg')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
+    try {
+      // 🚀 使用策略模式处理不同网站
+      const strategy = this._getImageExtractionStrategy(currentUrl)
+      originalImageUrls = await strategy.extract(page, thumbnailImages, currentUrl)
+      
+      // 统一过滤空值
+      originalImageUrls = originalImageUrls.filter(url => url && url !== '')
 
-        // 使用 Array.map 方法获取每个 <span> 元素的 data-src 属性的值
-        const dataSrcValues = spans.map((span) => span.getAttribute('data-src'))
+      this.logger.debug('提取的原图URLs:', originalImageUrls)
+      this.logger.info(`🎯 原图URL数量: ${originalImageUrls.length}`)
 
-        return dataSrcValues
-      })
-    } else if (currentUrl.includes('http://www.alsasianporn.com')) {
-      originalImageUrls = await page.evaluate(() => {
-        const as = Array.from(document.querySelectorAll('a[data-fancybox="gallery"]')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
+      return originalImageUrls
+    } catch (error) {
+      this.logger.error('获取原图URL失败:', error)
+      return []
+    }
+  }
 
-        // 使用 Array.map 方法获取每个 <span> 元素的 data-src 属性的值
-        const hrefValues = as.map((span) => span.getAttribute('href'))
-
-        return hrefValues
-      })
-    } else if (
-      currentUrl.includes('https://www.japanesesexpic.me') ||
-      currentUrl.includes('http://www.asianpussypic.me')
-    ) {
-      originalImageUrls = await page.evaluate(() => {
-        const as = Array.from(document.querySelectorAll('a[target="_blank"]')) // 获取页面中所有具有 "jpg" 类名的 <span> 元素
-
-        // 使用 Array.map 方法获取每个 <span> 元素的 data-src 属性的值
-        const hrefValues = as.map((span) => span.getAttribute('href'))
-
-        return hrefValues
-      })
-    } else if (currentUrl.includes('https://chpic.su')) {
-      // 处理 chpic.su 的情况 - 使用工具函数生成原图URL
-      const { generateOriginalImageUrl } = await import('./image/generateOriginalImageUrl.js')
-
-      originalImageUrls = thumbnailImages
-        .map((imageUrl) => generateOriginalImageUrl(imageUrl, 'transparent'))
-        .filter((imageUrl) => imageUrl !== '')
-
-      const originalImageUrlsOtherTypes = thumbnailImages
-        .map((imageUrl) => generateOriginalImageUrl(imageUrl, 'white'))
-        .filter((imageUrl) => imageUrl !== '')
-
-      originalImageUrls.push(...originalImageUrlsOtherTypes)
-    } else if (this._containsRestrictedWords(currentUrl)) {
-      originalImageUrls = await page.evaluate((currentUrl) => {
-        const imgEls = Array.from(document.querySelectorAll('img'))
-
-        const srcValues = imgEls.map((el) => {
-          const srcValue = el.getAttribute('src')
-          if (!srcValue.includes('tn_')) return ''
-          return currentUrl.split('?')[0] + srcValue.replace('tn_', '')
-        })
-
-        return srcValues
-      }, currentUrl)
-    } else {
-      // 默认情况：使用工具函数生成原图URL
-      const { generateOriginalImageUrl } = await import('./image/generateOriginalImageUrl.js')
-
-      originalImageUrls = thumbnailImages
-        .map((imageUrl) => generateOriginalImageUrl(imageUrl))
-        .filter((imageUrl) => imageUrl !== '')
+  /**
+   * 获取图片提取策略
+   * @param {string} currentUrl 当前页面URL
+   * @returns {Object} 提取策略对象
+   * @private
+   */
+  _getImageExtractionStrategy(currentUrl) {
+    // 🎯 网站特定策略配置
+    const strategies = {
+      'eroticbeauties.net': new EroticBeautiesStrategy(),
+      'alsasianporn.com': new AlsasianPornStrategy(),
+      'japanesesexpic.me': new TargetBlankStrategy(),
+      'asianpussypic.me': new TargetBlankStrategy(),
+      'chpic.su': new ChpicSuStrategy(),
+      'restricted': new RestrictedSiteStrategy(),
+      'default': new DefaultImageStrategy()
     }
 
-    originalImageUrls = originalImageUrls.filter((imageUrl) => imageUrl !== '')
+    // 检查特定网站
+    for (const [domain, strategy] of Object.entries(strategies)) {
+      if (domain !== 'restricted' && domain !== 'default' && currentUrl.includes(domain)) {
+        return strategy
+      }
+    }
 
-    this.logger.debug('originalImageUrls: ', originalImageUrls)
-    this.logger.info(`原图 URL 数量: ${originalImageUrls.length}`)
+    // 检查受限网站
+    if (this._containsRestrictedWords(currentUrl)) {
+      return strategies.restricted
+    }
 
-    return originalImageUrls
+    // 返回默认策略
+    return strategies.default
   }
 
   /**
@@ -498,44 +485,20 @@ export class ImageExtractor {
    * @private
    */
   _containsRestrictedWords(str) {
+    // 🔧 提取受限词汇配置
     const restrictedWords = [
-      'theasianpics',
-      'asiansexphotos',
-      'asianmatureporn',
-      'asianamateurgirls',
-      'hotasianamateurs',
-      'amateurchinesepics',
-      'asiannudistpictures',
-      'filipinahotties',
-      'chinesesexphotos',
-      'japaneseteenpics',
-      'hotnudefilipinas',
-      'asianteenpictures',
-      'asianteenphotos',
-      'chineseteenpics',
-      'cuteasians',
-      'amateurasianpictures',
-      'chinesexxxpics',
-      'sexyasians',
-      'allasiansphotos',
-      'chinese-girlfriends',
-      'chinesegirlspictures',
-      'chinese-sex.xyz',
-      'asian-cuties-online',
-      'japaneseamateurpics',
-      'asiangalleries',
-      'filipinapornpictures',
-      'japanesenudities',
-      'koreanpornpics',
-      'filipinanudes',
-      'chinesepornpics',
-      'asianamatures',
-      'nudehotasians',
-      'asianpornpictures',
-      'orientgirlspictures',
+      'theasianpics', 'asiansexphotos', 'asianmatureporn', 'asianamateurgirls',
+      'hotasianamateurs', 'amateurchinesepics', 'asiannudistpictures', 'filipinahotties',
+      'chinesesexphotos', 'japaneseteenpics', 'hotnudefilipinas', 'asianteenpictures',
+      'asianteenphotos', 'chineseteenpics', 'cuteasians', 'amateurasianpictures',
+      'chinesexxxpics', 'sexyasians', 'allasiansphotos', 'chinese-girlfriends',
+      'chinesegirlspictures', 'chinese-sex.xyz', 'asian-cuties-online', 'japaneseamateurpics',
+      'asiangalleries', 'filipinapornpictures', 'japanesenudities', 'koreanpornpics',
+      'filipinanudes', 'chinesepornpics', 'asianamatures', 'nudehotasians',
+      'asianpornpictures', 'orientgirlspictures'
     ]
 
-    return restrictedWords.some((word) => str.includes(word))
+    return restrictedWords.some(word => str.includes(word))
   }
 
   /**
