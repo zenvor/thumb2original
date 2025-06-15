@@ -2,7 +2,7 @@ import puppeteer from 'puppeteer'
 import { config as defaultConfig } from '../config.js'
 import { ConsolaLogger as Logger } from '../logger/ConsolaLogger.js'
 import { ImageExtractor } from './ImageExtractor.js'
-import { DownloadManager, DownloadProgress } from './download/index.js'
+import { DownloadManager, DownloadProgress } from './download-manager/index.js'
 
 /**
  * 主爬虫类（重构后）
@@ -271,6 +271,12 @@ export class Crawler {
   async downloadImages(imageUrls, mainPage) {
     return new Promise(async (resolve) => {
       this.globalResolveHandler = resolve
+
+      // 🚀 提前创建目标文件夹，避免与进度条显示冲突
+      const targetDownloadPath = this.imageExtractor.getTargetDownloadPath()
+      const enableProgressBar = this.config.enableProgressBar
+      const DownloadUtils = await import('./download-manager/DownloadUtils.js')
+      DownloadUtils.createTargetDirectory(targetDownloadPath, this.logger.child('DownloadUtils'), enableProgressBar)
 
       // 🚀 重置进度管理器（KISS重构后）
       this.progressManager.reset()

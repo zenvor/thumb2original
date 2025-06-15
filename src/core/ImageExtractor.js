@@ -189,11 +189,7 @@ export class ImageExtractor {
       const downloadFolderPath = this.config.downloadFolderPath
       const rootDownloadDir = 'download'
 
-      // 确保根下载目录 'download' 存在
-      if (!fs.existsSync(rootDownloadDir)) {
-        fs.mkdirSync(rootDownloadDir)
-        this.logger.info(`根下载目录 '${rootDownloadDir}' 已创建`)
-      }
+      // 注意：不需要在这里创建目录，DownloadUtils.createTargetDirectory会递归创建所有必需的目录
 
       if (downloadFolderPath) {
         // 使用用户指定的下载路径
