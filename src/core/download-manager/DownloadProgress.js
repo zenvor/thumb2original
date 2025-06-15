@@ -37,9 +37,7 @@ export class DownloadProgress {
         '|\x1b[32m{bar}\x1b[0m|',
         '\x1b[33m{percentage}%\x1b[0m',
         '|\x1b[35m{value}/{total}\x1b[0m',
-        '|\x1b[36m速率: {speed}\x1b[0m',
-        '|\x1b[94mETA: {eta}\x1b[0m',
-        '|\x1b[90m用时: {duration}\x1b[0m'
+        '|\x1b[36m速率: {speed}\x1b[0m'
       ].join(' '),
       barCompleteChar: '\u2588',
       barIncompleteChar: '\u2591',
@@ -70,9 +68,7 @@ export class DownloadProgress {
       )
       
       this.progressBar.start(total, 0, {
-        speed: '0 张/秒',
-        eta: '计算中...',
-        duration: '00:00'
+        speed: '0 张/秒'
       })
     }
 
@@ -120,26 +116,11 @@ export class DownloadProgress {
     const now = Date.now()
     const elapsed = (now - this.startTime) / 1000
     
-    // 计算速率和ETA
+    // 计算速率
     const avgSpeed = processed > 0 ? (processed / elapsed).toFixed(1) : '0'
-    
-    // 🔧 修复：当完成时显示"已完成"
-    let eta
-    if (processed >= this.totalImagesCount) {
-      eta = '已完成'
-    } else if (processed > 0) {
-      const remainingTime = (this.totalImagesCount - processed) / (processed / elapsed)
-      eta = this._formatTime(remainingTime)
-    } else {
-      eta = '计算中...'
-    }
-    
-    const duration = this._formatTime(elapsed)
 
     this.progressBar.update(processed, {
-      speed: `${avgSpeed} 张/秒`,
-      eta: eta,
-      duration: duration
+      speed: `${avgSpeed} 张/秒`
     })
 
     this.lastUpdateTime = now
@@ -156,9 +137,7 @@ export class DownloadProgress {
       
       // 更新到最终状态
       this.progressBar.update(processed, {
-        speed: `${avgSpeed} 张/秒`,
-        eta: '已完成',
-        duration: this._formatTime(elapsed)
+        speed: `${avgSpeed} 张/秒`
       })
       
       // 手动停止进度条，但不清除显示
