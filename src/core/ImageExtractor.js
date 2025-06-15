@@ -260,7 +260,7 @@ export class ImageExtractor {
           // 记录最后一次有效滚动的时间戳
           let lastScrollTime = Date.now()
 
-          // 监听'scroll'事件。这是处理“无限滚动”的关键。
+          // 监听'scroll'事件。这是处理"无限滚动"的关键。
           // 只要页面因新内容加载而继续滚动，此时间戳就会被更新。
           window.addEventListener(
             'scroll',
@@ -310,58 +310,100 @@ export class ImageExtractor {
     // 使用标准 URL 构造函数提取 origin
     const origin = new URL(this.currentUrl).origin
 
-    let images = await page.evaluate((origin) => {
-      const elementArray = ['a', 'img', 'svg', 'use', 'meta', 'link', 'figure']
-
-      const elements = Array.from(document.querySelectorAll('img')) // 获取所有的 a 和 img 元素
-      return elements
-        .map((element) => {
-          if (element.tagName === 'A') {
-            let url = element.getAttribute('href')
-            if (!url) return null
-
-            url = handleImageUrl(url, origin)
-            if (isImageUrl(url)) return url
-          } else if (element.tagName === 'IMG') {
-            let url = element.getAttribute('src')
-            if (!url) return null
-
-            url = handleImageUrl(url, origin)
-            return url
-          }
-          return null // 返回 null 表示不是图像链接
-        })
-        .filter((url) => url != null)
-
-      function handleImageUrl(url, origin) {
-        if (origin.includes('http://asiantgp.net')) {
-          const prefix = 'http://asiantgp.net/gallery/Japanese_cute_young_wife_Haruka'
-          return prefix + '/' + url
-        } else if (!url.startsWith('http')) {
-          return (url = `${origin}` + url)
-        } else {
-          return url
+    // 🔧 优化后的图片提取逻辑
+    let images = await page.evaluate((origin, currentUrl) => {
+      // 图片文件扩展名正则表达式
+      const IMAGE_EXTENSIONS_REGEX = /(https?:\/\/).*\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff)$/i
+      
+      // 特殊网站配置
+      const SPECIAL_SITES = {
+        'asiantgp.net': {
+          prefix: 'http://asiantgp.net/gallery/Japanese_cute_young_wife_Haruka'
         }
       }
 
       /**
-       * 是否为图像链接
-       * @param {string} url
-       * @returns
+       * 检查是否为图像URL
+       * @param {string} url 
+       * @returns {boolean}
        */
       function isImageUrl(url) {
-        // 定义一个正则表达式，匹配以常见图像文件扩展名结尾的字符串
-        let regex = /(https?:\/\/).*\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff)$/i // 使用不区分大小写的标志 'i'
-        // 调用test()方法，检查url是否符合正则表达式
-        return regex.test(url)
+        return IMAGE_EXTENSIONS_REGEX.test(url)
       }
-    }, origin)
+
+      /**
+       * 处理图像URL，确保URL格式正确
+       * @param {string} url 原始URL
+       * @param {string} origin 页面origin
+       * @param {string} currentUrl 当前页面URL
+       * @returns {string} 处理后的URL
+       */
+      function handleImageUrl(url, origin, currentUrl) {
+        if (!url) return ''
+
+        // 处理特殊网站
+        if (origin.includes('asiantgp.net')) {
+          return `${SPECIAL_SITES['asiantgp.net'].prefix}/${url}`
+        }
+        
+        // 处理相对路径
+        if (!url.startsWith('http')) {
+          // 如果是以 / 开头的绝对路径
+          if (url.startsWith('/')) {
+            return `${origin}${url}`
+          }
+          // 相对路径，使用当前页面URL构建
+          try {
+            return new URL(url, currentUrl).href
+          } catch (error) {
+            // 如果URL构建失败，使用简单拼接
+            return `${origin}${url.startsWith('/') ? '' : '/'}${url}`
+          }
+        }
+        
+        return url
+      }
+
+      /**
+       * 从元素中提取图像URL
+       * @param {Element} element DOM元素
+       * @returns {string|null} 图像URL或null
+       */
+      function extractImageUrl(element) {
+        let url = null
+        
+        if (element.tagName === 'A') {
+          url = element.getAttribute('href')
+          if (!url) return null
+          
+          url = handleImageUrl(url, origin, currentUrl)
+          // 对于链接元素，只有当href指向图像时才返回
+          return isImageUrl(url) ? url : null
+        } 
+        
+        if (element.tagName === 'IMG') {
+          url = element.getAttribute('src')
+          if (!url) return null
+          
+          return handleImageUrl(url, origin, currentUrl)
+        }
+        
+        return null
+      }
+
+      // 🔧 修复：同时选择 a 和 img 元素
+      const elements = Array.from(document.querySelectorAll('a[href], img[src]'))
+      
+      return elements
+        .map(extractImageUrl)
+        .filter(url => url !== null && url !== '')
+    }, origin, this.currentUrl)
 
     // 使用 Set 去重
     images = Array.from(new Set(images))
 
     this.logger.debug('提取的图像', images)
-    this.logger.info(`提取的图像的个数: ${images.length}`)
+    this.logger.info(`🖼️ 提取的图像数量: ${images.length}`)
 
     return images
   }

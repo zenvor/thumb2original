@@ -9,8 +9,8 @@ const config = {
   // puppeteer-priority: 优先使用Puppeteer，失败时fallback到Axios（推荐）
   downloadMethod: 'auto',
   // 目标解析网站
-  url: 'https://www.duitang.com/blog/?id=1507598814',
-  
+  // url: 'https://www.duitang.com/blog/?id=1507598814',
+  url: 'https://www.duitang.com/category/?cat=wallpaper',
   // 多个目标解析网站
   urls: [],
   // 重试间隔(秒钟)-如果有下载失败的照片，服务会等待一段时间，然后重新下载请求失败的照片，默认 5 秒钟
@@ -28,7 +28,7 @@ const config = {
   
   // 浏览器配置
   browser: {
-    headless: true,
+    headless: false,
     timeout: 30000,          // 浏览器启动超时（毫秒）
     viewport: {              // 页面视口配置
       width: 1920,
