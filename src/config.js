@@ -2,15 +2,16 @@ const config = {
   // 解析模式 'singleSite' 单个站点 | 'multipleSites' 多个站点
   extractMode: 'singleSite',
   // 下载模式 'downloadAllImages' | 'downloadOriginImagesByThumbnails'
-  downloadMode: 'downloadOriginImagesByThumbnails',
+  downloadMode: 'downloadAllImages',
   // 下载方式 'auto' | 'axios' | 'puppeteer-priority'
   // auto: 智能选择（默认，保持原有逻辑）
   // axios: 强制使用Axios下载所有图片
   // puppeteer-priority: 优先使用Puppeteer，失败时fallback到Axios（推荐）
-  downloadMethod: 'auto',
+  downloadMethod: 'axios',
   // 目标解析网站
   // url: 'https://www.duitang.com/blog/?id=1507598814',
-  url: 'https://www.duitang.com/category/?cat=wallpaper',
+  // url: 'https://www.duitang.com/category/?cat=wallpaper',
+  url: 'https://pixabay.com/ja/images/search/%E7%BE%8E%E5%B0%91%E5%A5%B3/',
   // 多个目标解析网站
   urls: [],
   // 重试间隔(秒钟)-如果有下载失败的照片，服务会等待一段时间，然后重新下载请求失败的照片，默认 5 秒钟
