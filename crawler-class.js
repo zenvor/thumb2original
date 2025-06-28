@@ -4,9 +4,9 @@ import axios from 'axios'
 import puppeteer from 'puppeteer'
 import sharp from 'sharp'
 // 检验并生成一个符合 Windows 文件命名规则的文件名
-import { validateAndModifyFileName } from './utils/validate-and-modify-file-name.js'
+import { sanitizeFileName } from './utils/validate-and-modify-file-name.js'
 // 根据缩略图获取原图
-import { generateOriginalImageUrl } from './utils/generate-original-image-url.js'
+import { convertThumbnailToOriginalUrl } from './utils/thumbnail-to-original-url.js'
 // 解析链接
 import { parseUrl } from './utils/parse-url.js'
 
@@ -212,7 +212,7 @@ export default class ImageExtractor {
     return new Promise(async (resolve) => {
       this.downloadFolderPath
         ? (this.targetDownloadFolderPath = this.downloadFolderPath)
-        : (this.targetDownloadFolderPath = `./download/${validateAndModifyFileName(`${this.title}`)}`)
+        : (this.targetDownloadFolderPath = `./download/${sanitizeFileName(`${this.title}`)}`)
 
       const { protocolAndDomain } = parseUrl(this.currentUrl)
 
@@ -360,7 +360,7 @@ export default class ImageExtractor {
           }
 
           //  生成文件名
-          const fileName = validateAndModifyFileName(this.extractFileName(imageUrl, buffer))
+          const fileName = sanitizeFileName(this.extractFileName(imageUrl, buffer))
           // 构造目标文件的完整路径
           const targetFilePath = path.join(this.targetDownloadFolderPath, fileName)
 
@@ -407,7 +407,7 @@ export default class ImageExtractor {
             }
           } else {
             //  生成文件名
-            fileName = validateAndModifyFileName(this.extractFileName(imageUrl, buffer))
+            fileName = sanitizeFileName(this.extractFileName(imageUrl, buffer))
           }
 
           // 构造目标文件的完整路径
@@ -445,7 +445,7 @@ export default class ImageExtractor {
 
       this.downloadFolderPath
         ? (this.targetDownloadFolderPath = this.downloadFolderPath)
-        : (this.targetDownloadFolderPath = `./download/${validateAndModifyFileName(`${this.title}`)}`)
+        : (this.targetDownloadFolderPath = `./download/${sanitizeFileName(`${this.title}`)}`)
 
       // 创建一个新的页面
       const page = await this.browser.newPage()
@@ -691,10 +691,10 @@ export default class ImageExtractor {
           } else if (this.currentUrl.includes('https://chpic.su')) {
             if (!requestFailedImages?.length) {
               originalImageUrls = this.images
-                .map((imageUrl) => generateOriginalImageUrl(imageUrl, 'transparent'))
+                .map((imageUrl) => convertThumbnailToOriginalUrl(imageUrl, 'transparent'))
                 .filter((imageUrl) => imageUrl !== '')
               const originalImageUrlsOtherTypes = this.images
-                .map((imageUrl) => generateOriginalImageUrl(imageUrl, 'white'))
+                .map((imageUrl) => convertThumbnailToOriginalUrl(imageUrl, 'white'))
                 .filter((imageUrl) => imageUrl !== '')
 
               originalImageUrls.push(...originalImageUrlsOtherTypes)
@@ -713,7 +713,7 @@ export default class ImageExtractor {
             }, this.currentUrl)
           } else {
             originalImageUrls = this.images
-              .map((imageUrl) => generateOriginalImageUrl(imageUrl))
+              .map((imageUrl) => convertThumbnailToOriginalUrl(imageUrl))
               .filter((imageUrl) => imageUrl !== '')
           }
 
