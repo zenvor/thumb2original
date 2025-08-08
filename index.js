@@ -17,6 +17,8 @@ import {
   processLocalHtmlMode 
 } from './lib/htmlProcessor.js'
 import { scrapeUrl } from './lib/downloadManager.js'
+import fs from 'fs/promises'
+import path from 'path'
 
 /**
  * @description 主函数，根据配置启动图片抓取器。
@@ -26,9 +28,21 @@ async function runImageScraper(config) {
   // 初始化日志配置
   logger.initConfig(defaultLogConfig);
   logger.info('日志系统已初始化', 'system');
+  // 检查输出目录可写性，不可写则回退到 ./download
+  try {
+    const outputDir = config.outputDirectory || path.join(process.cwd(), 'download')
+    await fs.mkdir(outputDir, { recursive: true })
+    await fs.access(outputDir)
+    logger.info(`输出目录可用: ${outputDir}`)
+  } catch (e) {
+    const fallback = path.join(process.cwd(), 'download')
+    logger.warn(`输出目录不可用，将回退到: ${fallback}`)
+    config.outputDirectory = fallback
+    await fs.mkdir(fallback, { recursive: true })
+  }
   // 构建浏览器启动参数
   const launchOptions = {
-    headless: 'new',          // 使用 new Cloudflare 对旧 headless 标记更敏感 
+    headless: false,          // 使用 new Cloudflare 对旧 headless 标记更敏感 
     timeout: 300 * 1000,
     protocolTimeout: 300 * 1000,  // 协议超时时间
     slowMo: 100,              // 减慢操作速度，提高稳定性
