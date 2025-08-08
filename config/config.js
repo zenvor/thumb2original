@@ -12,7 +12,8 @@ export const siteConfigs = {
     useAxiosFirst: false, // 是否优先使用 Axios 进行请求
     // 针对 imx.to 的完整请求头配置，解决 503 错误
     customHeaders: {
-      'Accept': 'text/html,application/xhtml+xml,application/xml;∏q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      // 修复 Accept 头中的错字，防止服务端解析异常
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
       'Accept-Encoding': 'gzip, deflate, br, zstd',
       'Accept-Language': 'en-US,en;q=0.9',
       'Cache-Control': 'max-age=0',
@@ -49,7 +50,7 @@ export const siteConfigs = {
  */
 export const scraperConfig = {
   // --- 核心模式 ---
-  scrapeMode: 'local_html', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
+  scrapeMode: 'single_page', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
   imageMode: 'originals_only', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
 
   // --- 本地HTML爬虫模式配置 ---
@@ -61,7 +62,7 @@ export const scraperConfig = {
   memoryDirectory: './memory', // 记忆目录路径（每个HTML文件对应一个JSONL文件）
   forceReprocess: false, // 是否强制重新处理所有文件（忽略记忆）
   lazyMemoryCreation: true, // 是否启用懒加载模式，只在实际处理时创建JSONL文件
-  maxFilesPerRun: 50, // 每次运行最大处理文件数量（0表示无限制）
+  maxFilesPerRun: 200, // 每次运行最大处理文件数量（0表示无限制）
   confirmLargeRun: false, // 处理大量文件前是否需要用户确认（检测到超过100个HTML文件时会提示用户确认）
 
   // --- 反检测配置 ---
@@ -74,7 +75,7 @@ export const scraperConfig = {
   },
 
   // --- 目标 URL ---
-  targetUrl: '', // 目标网址 (单页模式)
+  targetUrl: 'https://www.duitang.com/category/?cat=wallpaper', // 目标网址 (单页模式)
   targetUrls: [
     // 目标网址列表 (多页模式)
     // 'https://www.site1.com/gallery/page1',
@@ -82,7 +83,7 @@ export const scraperConfig = {
   ],
 
   // --- 下载行为 ---
-  outputDirectory: '', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
+  outputDirectory: '/Volumes/PSSD/外部/picture/download', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
   maxRetries: 5, // 下载失败后的最大重试次数
   retryDelaySeconds: 5, // 每次重试的间隔时间 (秒)
 
