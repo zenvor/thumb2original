@@ -232,13 +232,13 @@ export async function validateImage(buffer) {
  */
 export async function getDominantColors(buffer, colors = 5) {
   try {
-    const { dominant } = await sharp(buffer)
-      .resize(100, 100, { fit: 'cover' })
-      .raw()
-      .toBuffer({ resolveWithObject: true })
-    
-    // 这里简化实现，实际项目中可能需要更复杂的颜色分析算法
-    return [{ r: dominant.r, g: dominant.g, b: dominant.b, frequency: 1.0 }]
+    // 使用 stats() 获取主导颜色
+    const stats = await sharp(buffer).stats()
+    const d = stats?.dominant
+    if (d && typeof d.r === 'number') {
+      return [{ r: d.r, g: d.g, b: d.b, frequency: 1.0 }]
+    }
+    return null
   } catch (error) {
     logger.error(`获取主要颜色失败: ${error.message}`)
     return null
