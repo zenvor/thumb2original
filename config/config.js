@@ -50,7 +50,7 @@ export const siteConfigs = {
  */
 export const scraperConfig = {
   // --- 核心模式 ---
-  scrapeMode: 'single_page', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
+  scrapeMode: 'local_html', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
   imageMode: 'originals_only', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
 
   // --- 本地HTML爬虫模式配置 ---
@@ -62,7 +62,7 @@ export const scraperConfig = {
   memoryDirectory: './memory', // 记忆目录路径（每个HTML文件对应一个JSONL文件）
   forceReprocess: false, // 是否强制重新处理所有文件（忽略记忆）
   lazyMemoryCreation: true, // 是否启用懒加载模式，只在实际处理时创建JSONL文件
-  maxFilesPerRun: 200, // 每次运行最大处理文件数量（0表示无限制）
+  maxFilesPerRun: 250, // 每次运行最大处理文件数量（0表示无限制）
   confirmLargeRun: false, // 处理大量文件前是否需要用户确认（检测到超过100个HTML文件时会提示用户确认）
 
   // --- 反检测配置 ---
@@ -88,7 +88,7 @@ export const scraperConfig = {
   retryDelaySeconds: 5, // 每次重试的间隔时间 (秒)
 
   // --- 性能与反爬虫 ---
-  concurrentDownloads: 10, // 并发下载数 (降低并发以避免 503 错误)
+  concurrentDownloads: 5, // 并发下载数 (降低并发以避免 503 错误)
   minRequestDelayMs: 2000, // 两批次下载之间的最小延迟 (毫秒) - 增加延迟
   maxRequestDelayMs: 4000, // 两批次下载之间的最大延迟 (毫秒) - 增加延迟
 
@@ -100,6 +100,13 @@ export const scraperConfig = {
     retryDelay: 2000, // 重试间隔时间 (毫秒)
     enableErrorRecovery: true, // 是否启用错误恢复机制
     connectionCheckInterval: 30000 // 浏览器连接检查间隔 (毫秒)
+  },
+
+  // --- 网络限速（下载带宽） ---
+  // bandwidthLimitKbps 为 0 表示不限速；>0 表示全局限速（聚合带宽），单位 KB/s（千字节每秒）
+  // 注意：聚合限速作用于 Axios 下载流；Puppeteer 仅在作为回退下载时按页面生效，聚合程度取决于并发页数。
+  network: {
+    bandwidthLimitKbps: 0
   }
 }
 

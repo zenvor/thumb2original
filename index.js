@@ -42,7 +42,7 @@ async function runImageScraper(config) {
   }
   // 构建浏览器启动参数
   const launchOptions = {
-    headless: false,          // 使用 new Cloudflare 对旧 headless 标记更敏感 
+    headless: 'new',          // 使用 new Cloudflare 对旧 headless 标记更敏感 
     timeout: 300 * 1000,
     protocolTimeout: 300 * 1000,  // 协议超时时间
     slowMo: 100,              // 减慢操作速度，提高稳定性
