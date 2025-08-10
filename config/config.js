@@ -50,7 +50,7 @@ export const siteConfigs = {
  */
 export const scraperConfig = {
   // --- 核心模式 ---
-  scrapeMode: 'local_html', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
+  scrapeMode: 'multiple_pages', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
   imageMode: 'originals_only', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
 
   // --- 本地HTML爬虫模式配置 ---
@@ -78,8 +78,8 @@ export const scraperConfig = {
   targetUrl: 'https://www.duitang.com/category/?cat=wallpaper', // 目标网址 (单页模式)
   targetUrls: [
     // 目标网址列表 (多页模式)
-    // 'https://www.site1.com/gallery/page1',
-    // 'https://www.site2.com/album/xyz'
+    'https://www.pexels.com/ja-jp/search/4k/',
+    'https://www.duitang.com/category/?cat=wallpaper'
   ],
 
   // --- 下载行为 ---
@@ -106,7 +106,7 @@ export const scraperConfig = {
   // bandwidthLimitKbps 为 0 表示不限速；>0 表示全局限速（聚合带宽），单位 KB/s（千字节每秒）
   // 注意：聚合限速作用于 Axios 下载流；Puppeteer 仅在作为回退下载时按页面生效，聚合程度取决于并发页数。
   network: {
-    bandwidthLimitKbps: 3 * 1024
+    bandwidthLimitKbps: 0
   }
 }
 

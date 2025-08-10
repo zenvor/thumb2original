@@ -10,9 +10,7 @@ if (scraperConfig.antiDetection?.enableStealth !== false) {
   puppeteer.use(StealthPlugin())
   logger.info('已启用 Stealth 插件进行反检测')
 }
-import { 
-  processLocalHtmlMode 
-} from './lib/htmlProcessor.js'
+import { processLocalHtmlMode } from '@crawler/core'
 import fs from 'fs/promises'
 import path from 'path'
 
