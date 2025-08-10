@@ -5,7 +5,9 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test:e2e:local": "node download/test/local-html-e2e.mjs",
+    "test:e2e:single": "node download/test/single-page-e2e.mjs"
   },
   "author": "",
   "license": "ISC",
