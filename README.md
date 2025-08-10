@@ -4,6 +4,20 @@
 
 注：本地 HTML 模式由核心库 `@crawler/core` 提供实现，CLI 仅负责配置与调用，无需维护重复工具函数。
 
+## 安装 @crawler/core（通过 GitHub 引用）
+
+在 `package.json` 中直接通过 GitHub tag 引用（固定版本，保证可重复构建）：
+
+```json
+{
+  "dependencies": {
+    "@crawler/core": "github:zenvor/crawler-core#v0.1.0"
+  }
+}
+```
+
+> 发布说明与历史版本：参见 [crawler-core Releases](https://github.com/zenvor/crawler-core/releases)（当前稳定版本：[v0.1.0](https://github.com/zenvor/crawler-core/releases/tag/v0.1.0)）。
+
 ## 功能特性
 
 - **多种爬虫模式**：
