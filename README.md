@@ -104,10 +104,8 @@ node index.js
 thumb2original/
 ├── config/                  # 配置文件
 │   └── config.js           # 主配置文件
-├── lib/                     # 核心功能模块
-│   ├── downloadManager.js  # 下载管理
-│   ├── htmlProcessor.js    # HTML处理
-│   └── imageDownloader.js  # 图片下载
+├── lib/                     # 本地 HTML 模式辅助
+│   └── htmlProcessor.js    # 本地 HTML 解析与批处理
 ├── utils/                   # 工具函数
 │   ├── logger.js           # 日志工具
 │   ├── imageUtils.js       # 图片处理工具
@@ -122,7 +120,7 @@ thumb2original/
 │   ├── 页面标题1/
 │   └── 页面标题2/
 ├── index.js                # 主入口文件
-├── scraper.js              # 已弃用 (兼容旧版本)
+├── scraper.js              # 已弃用（请使用 index.js）
 ├── package.json
 └── README.md
 ```
