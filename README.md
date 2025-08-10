@@ -91,15 +91,8 @@ node index.js
 
 ### 3. 特殊站点 e2e 与故障排除（chpic.su / imx.to）
 
-- chpic.su（优先 Axios、原图规则验证）：
-  ```bash
-  CHPIC_URL="https://chpic.su/your_gallery" npm run test:e2e:chpic
-  ```
-- imx.to（Referer 头、503 规避、Axios→Puppeteer 回退验证）：
-  ```bash
-  IMX_URL="https://imx.to/your_gallery" npm run test:e2e:imx
-  ```
-  参考文档：[imx.to 域名 503 错误解决方案](./IMX_TO_503_FIX.md)
+- 运行指引请参考根级文档：`../docs/special-sites-e2e.md`
+- 故障排除：`../docs/troubleshooting-imx-to.md`
 
 ## 配置选项
 
