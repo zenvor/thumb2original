@@ -2,6 +2,8 @@
 
 一个功能强大的图片爬虫工具，支持从网页和本地HTML文件中提取图片URL，并自动将缩略图转换为原图进行下载。
 
+注：本地 HTML 模式由核心库 `@crawler/core` 提供实现，CLI 仅负责配置与调用，无需维护重复工具函数。
+
 ## 功能特性
 
 - **多种爬虫模式**：
@@ -104,14 +106,9 @@ node index.js
 thumb2original/
 ├── config/                  # 配置文件
 │   └── config.js           # 主配置文件
-├── lib/                     # 本地 HTML 模式辅助
-│   └── htmlProcessor.js    # 本地 HTML 解析与批处理
+├── lib/                     # （已移除）本地 HTML 解析已迁移到 @crawler/core
 ├── utils/                   # 工具函数
-│   ├── logger.js           # 日志工具
-│   ├── imageUtils.js       # 图片处理工具
-│   ├── fileUtils.js        # 文件操作工具
-│   ├── fileNameSanitizer.js # 文件名处理
-│   └── imageUrlConverter.js # URL转换
+│   └── logger.js           # 日志工具（复用 @crawler/core）
 ├── html/                    # 本地HTML文件目录
 │   └── 网站名称/
 │       ├── page1.html
