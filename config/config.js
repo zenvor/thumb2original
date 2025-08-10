@@ -106,7 +106,7 @@ export const scraperConfig = {
   // bandwidthLimitKbps 为 0 表示不限速；>0 表示全局限速（聚合带宽），单位 KB/s（千字节每秒）
   // 注意：聚合限速作用于 Axios 下载流；Puppeteer 仅在作为回退下载时按页面生效，聚合程度取决于并发页数。
   network: {
-    bandwidthLimitKbps: 0
+    bandwidthLimitKbps: 3 * 1024
   }
 }
 

@@ -3,20 +3,16 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { scraperConfig } from './config/config.js'
 import { logger } from './utils/logger.js'
 import { defaultLogConfig } from './config/logConfig.js'
+import { extractImages, downloadImages, htmlMemoryManager } from '@crawler/core'
 
 // 根据配置决定是否使用 stealth 插件
 if (scraperConfig.antiDetection?.enableStealth !== false) {
   puppeteer.use(StealthPlugin())
   logger.info('已启用 Stealth 插件进行反检测')
 }
-import { downloadManager } from './lib/downloadManager.js'
 import { 
-  loadAndScrollPage, 
-  extractImageUrls, 
-  processUrlsByImageMode, 
   processLocalHtmlMode 
 } from './lib/htmlProcessor.js'
-import { scrapeUrl } from './lib/downloadManager.js'
 import fs from 'fs/promises'
 import path from 'path'
 
@@ -132,7 +128,32 @@ async function runImageScraper(config) {
     if (config.scrapeMode === 'local_html') {
       // 本地HTML爬虫模式
       logger.header('\n=================== 启动本地HTML爬虫模式 ===================')
-      await processLocalHtmlMode(browser, config, downloadManager)
+      // 适配器：将 CLI 的 downloadManager 调用委托到核心库的 downloadImages
+      const coreDownloadAdapter = async (imageUrls, context) => {
+        // 确保核心记忆目录与 CLI 配置一致
+        if (config.enableMemory && config.memoryDirectory) {
+          try { htmlMemoryManager.memoryDirectory = config.memoryDirectory } catch {}
+        }
+        const options = {
+          // 下载参数映射
+          pageTitle: context.pageTitle,
+          outputDirectory: config.outputDirectory,
+          network: config.network,
+          concurrentDownloads: config.concurrentDownloads,
+          maxRetries: config.maxRetries,
+          retryDelaySeconds: config.retryDelaySeconds,
+          minRequestDelayMs: config.minRequestDelayMs,
+          maxRequestDelayMs: config.maxRequestDelayMs,
+          // 断点续传/记忆
+          htmlFilePath: context.htmlFilePath || null,
+          isResumeDownload: Boolean(context.isResumeDownload),
+          downloadedCount: context.downloadedCount || 0,
+          // 回退下载可用的浏览器
+          browser
+        }
+        await downloadImages(imageUrls, options)
+      }
+      await processLocalHtmlMode(browser, config, coreDownloadAdapter)
       logger.header('=================== 本地HTML爬虫模式完成 ===================')
     } else {
       // 网络爬虫模式
@@ -141,7 +162,28 @@ async function runImageScraper(config) {
       for (const url of urlsToScrape) {
         if (!url) continue
         logger.header(`\n------------------- 开始抓取: ${url} -------------------`)
-        await scrapeUrl(url, browser, config, loadAndScrollPage, extractImageUrls, processUrlsByImageMode)
+        // 使用核心库提取与下载
+        const { title, imageUrls } = await extractImages(url, {
+          browser,
+          imageMode: config.imageMode,
+          antiDetection: config.antiDetection,
+          stability: config.stability
+        })
+        if (!imageUrls || imageUrls.length === 0) {
+          logger.warn('此 URL 无需下载图片。')
+        } else {
+          await downloadImages(imageUrls, {
+            pageTitle: title,
+            outputDirectory: config.outputDirectory,
+            network: config.network,
+            concurrentDownloads: config.concurrentDownloads,
+            maxRetries: config.maxRetries,
+            retryDelaySeconds: config.retryDelaySeconds,
+            minRequestDelayMs: config.minRequestDelayMs,
+            maxRequestDelayMs: config.maxRequestDelayMs,
+            browser
+          })
+        }
         logger.header(`------------------- 抓取完成: ${url} -------------------\n`)
       }
     }
