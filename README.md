@@ -147,7 +147,7 @@ thumb2original/
 
 - [本地HTML爬虫模式使用说明](./LOCAL_HTML_MODE.md)
 - [🛡️ 反检测功能使用指南](./ANTI_DETECTION.md) - **新增**
-- [🔧 imx.to 域名 503 错误解决方案](./IMX_TO_503_FIX.md) - **新增**
+- [🔧 imx.to 域名 503 错误解决方案](../docs/troubleshooting-imx-to.md) - **新增**
 - [HTML文件排序说明](./HTML_SORT_ORDER.md)
 
 ## 🔧 故障排除
