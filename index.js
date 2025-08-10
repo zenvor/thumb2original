@@ -1,7 +1,7 @@
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { scraperConfig } from './config/config.js'
-import { logger } from './utils/logger.js'
+import { logger } from '@crawler/core'
 import { defaultLogConfig } from './config/logConfig.js'
 import { extractImages, downloadImages, htmlMemoryManager } from '@crawler/core'
 

@@ -112,28 +112,6 @@ node index.js
 | `concurrentDownloads` | 并发下载数 | 数字，默认10 |
 | `maxRetries` | 最大重试次数 | 数字，默认3 |
 
-## 目录结构
-
-```
-thumb2original/
-├── config/                  # 配置文件
-│   └── config.js           # 主配置文件
-├── lib/                     # （已移除）本地 HTML 解析已迁移到 @crawler/core
-├── utils/                   # 工具函数
-│   └── logger.js           # 日志工具（复用 @crawler/core）
-├── html/                    # 本地HTML文件目录
-│   └── 网站名称/
-│       ├── page1.html
-│       └── page2.html
-├── download/                # 下载的图片目录
-│   ├── 页面标题1/
-│   └── 页面标题2/
-├── index.js                # 主入口文件
-├── scraper.js              # 已弃用（请使用 index.js）
-├── package.json
-└── README.md
-```
-
 ## 模块化架构
 
 项目采用模块化设计，代码组织清晰：
