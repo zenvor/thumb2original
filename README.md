@@ -122,7 +122,6 @@ thumb2original/
 │   ├── 页面标题1/
 │   └── 页面标题2/
 ├── index.js                # 主入口文件
-├── scraper.js              # 已弃用 (兼容旧版本)
 ├── package.json
 └── README.md
 ```

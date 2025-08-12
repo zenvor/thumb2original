@@ -6,7 +6,7 @@
 
 ## 配置方法
 
-在 `scraper.js` 文件中修改 `scraperConfig` 配置：
+在 `config/config.js` 文件中修改 `scraperConfig` 配置：
 
 ```javascript
 const scraperConfig = {
@@ -76,7 +76,7 @@ thumb2original/
 
 3. 运行爬虫：
    ```bash
-   node scraper.js
+   npm start
    ```
 
 ## 记忆功能说明
