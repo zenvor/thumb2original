@@ -14,25 +14,6 @@ class HtmlMemoryManager {
     this.processedFiles = new Set() // 已处理文件的路径集合
     this.fileMemoryMap = new Map() // HTML文件路径 -> JSONL文件路径的映射
     this._memoryDirSnapshot = null // 记忆目录快照，用于回退匹配
-    this.htmlRoot = null // HTML 根目录（用于相对 key 归一化）
-  }
-
-  /**
-   * @description 设置 HTML 根目录，用于生成稳定相对 key（提升路径稳健性）
-   * @param {string|null} htmlRoot - HTML 根目录（绝对或相对路径）。传 null 取消设置。
-   */
-  setHtmlRoot(htmlRoot) {
-    try {
-      if (!htmlRoot) {
-        this.htmlRoot = null
-        return
-      }
-      this.htmlRoot = path.resolve(htmlRoot)
-      logger.info(`已设置 HTML 根目录: ${this.htmlRoot}`)
-    } catch (error) {
-      logger.warn(`设置 HTML 根目录失败: ${error.message}`)
-      this.htmlRoot = null
-    }
   }
 
   /**
@@ -257,16 +238,6 @@ class HtmlMemoryManager {
    */
   _normalizeHtmlKey(htmlFilePath) {
     const absolute = path.resolve(htmlFilePath)
-    // 优先使用注入的 htmlRoot 生成稳定的相对 key
-    if (this.htmlRoot) {
-      try {
-        const rootAbs = path.resolve(this.htmlRoot)
-        const rel = path.relative(rootAbs, absolute)
-        if (rel && rel.length > 0 && !path.isAbsolute(rel)) {
-          return rel.split(path.sep).join('/').toLowerCase()
-        }
-      } catch {}
-    }
     const posixPath = absolute.split(path.sep).join('/')
     const lower = posixPath.toLowerCase()
     const marker = '/html/'
