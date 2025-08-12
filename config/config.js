@@ -51,7 +51,7 @@ export const siteConfigs = {
 export const scraperConfig = {
   // --- 核心模式 ---
   scrapeMode: 'single_page', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
-  imageMode: 'originals_only', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
+  imageMode: 'all', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
 
   // --- 本地HTML爬虫模式配置 ---
   htmlDirectory: './html', // 本地HTML文件目录路径
@@ -78,8 +78,8 @@ export const scraperConfig = {
   targetUrl: 'https://www.duitang.com/category/?cat=wallpaper', // 目标网址 (单页模式)
   targetUrls: [
     // 目标网址列表 (多页模式)
-    // 'https://www.site1.com/gallery/page1',
-    // 'https://www.site2.com/album/xyz'
+    'https://www.duitang.com/category/?cat=wallpaper',
+    'https://www.duitang.com/category/?cat=wallpaper#!hot-p2'
   ],
 
   // --- 下载行为 ---
