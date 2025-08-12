@@ -11,7 +11,8 @@ import { identifyImageFormat, convertWebpToPng } from './imageUtils.js'
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
- * @description 保存图像 Buffer 到文件系统。
+ * @deprecated 此函数已废弃，请使用 lib/fileManager.js 中的 saveImage
+ * @description 保存图像 Buffer 到文件系统（已废弃，转调新实现）。
  * @param {Buffer} buffer - 图像 Buffer。
  * @param {string} filePath - 目标文件路径。
  * @param {string} imageUrl - 原始图像 URL，用于错误记录。
@@ -19,30 +20,12 @@ export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  * @returns {Promise<void>}
  */
 export async function saveImage(buffer, filePath, imageUrl, stats) {
-  try {
-    let finalBuffer = buffer
-    let finalFilePath = filePath
-
-    if (identifyImageFormat(buffer) === 'webp') {
-      logger.info(`正在转换 WebP 图片: ${imageUrl}`)
-      const pngBuffer = await convertWebpToPng(buffer)
-      if (pngBuffer) {
-        finalBuffer = pngBuffer
-        finalFilePath = filePath.replace(/\.webp$/i, '.png')
-        logger.success('成功将 WebP 转换为 PNG。')
-      } else {
-        throw new Error('转换 WebP 缓冲区失败。')
-      }
-    }
-
-    await fs.writeFile(finalFilePath, finalBuffer)
-    stats.successful++
-    logger.success(`已下载 (${stats.successful}/${stats.total}): ${finalFilePath}`)
-  } catch (error) {
-    stats.failed++
-    stats.failedUrls.push(imageUrl)
-    logger.error(`保存图片失败 ${imageUrl}: ${error.message}`)
-  }
+  // 废弃警告
+  logger.warn('⚠️  utils/fileUtils.saveImage 已废弃，请使用 lib/fileManager.saveImage')
+  
+  // 转调新实现（动态导入避免循环依赖）
+  const { saveImage: newSaveImage } = await import('../lib/fileManager.js')
+  return await newSaveImage(buffer, filePath, imageUrl, stats)
 }
 
 /**
