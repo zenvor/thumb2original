@@ -13,6 +13,7 @@ class HtmlMemoryManager {
     this.memoryDirectory = memoryDirectory
     this.processedFiles = new Set() // 已处理文件的路径集合
     this.fileMemoryMap = new Map() // HTML文件路径 -> JSONL文件路径的映射
+    this._memoryDirSnapshot = null // 记忆目录快照，用于回退匹配
   }
 
   /**
@@ -46,7 +47,7 @@ class HtmlMemoryManager {
     for (const htmlFile of htmlFiles) {
       try {
         const absolutePath = this._getAbsolutePath(htmlFile)
-        const jsonlPath = this.getJsonlPathForHtml(absolutePath)
+        const jsonlPath = await this.resolveJsonlPathForHtml(absolutePath)
         
         // 快速检查记忆文件是否存在
         const fileExists = await this._checkFileExists(jsonlPath)
@@ -98,7 +99,7 @@ class HtmlMemoryManager {
     if (result.completed.length > 0) {
       logger.info('\n已完成的文件:')
       for (const htmlFile of result.completed) {
-        const jsonlPath = this.getJsonlPathForHtml(htmlFile)
+        const jsonlPath = await this.resolveJsonlPathForHtml(htmlFile)
         const completionCheck = await this._fastCompletionCheck(jsonlPath)
         logger.info(`  - ${path.basename(htmlFile)} (已下载 ${completionCheck.downloadedCount}/${completionCheck.totalImages} 张图片)`)
       }
@@ -220,12 +221,80 @@ class HtmlMemoryManager {
    * @returns {string} JSONL文件路径
    */
   getJsonlPathForHtml(htmlFilePath) {
-    // 使用HTML文件的绝对路径生成唯一的文件名
+    // 使用稳定的相对 key 生成唯一的文件名，避免绝对根路径变化导致哈希不一致
     const absolutePath = path.resolve(htmlFilePath)
-    const hash = crypto.createHash('md5').update(absolutePath).digest('hex')
+    const key = this._normalizeHtmlKey(absolutePath)
+    const hash = crypto.createHash('md5').update(key).digest('hex')
     const baseName = path.basename(htmlFilePath, '.html')
     const jsonlFileName = `${baseName}_${hash.substring(0, 8)}.jsonl`
     return path.join(this.memoryDirectory, jsonlFileName)
+  }
+
+  /**
+   * @description 生成稳定的 HTML 路径 key：优先取 /html/ 之后的相对路径，统一小写与分隔符
+   * @param {string} htmlFilePath - HTML 文件路径（绝对路径）
+   * @returns {string} 稳定 key
+   * @private
+   */
+  _normalizeHtmlKey(htmlFilePath) {
+    const absolute = path.resolve(htmlFilePath)
+    const posixPath = absolute.split(path.sep).join('/')
+    const lower = posixPath.toLowerCase()
+    const marker = '/html/'
+    const idx = lower.lastIndexOf(marker)
+    if (idx !== -1) {
+      return lower.slice(idx + marker.length)
+    }
+    // 回退：使用目录名/文件名，尽量稳定
+    const dir = path.basename(path.dirname(absolute))
+    const base = path.basename(absolute)
+    return `${dir}/${base}`.toLowerCase()
+  }
+
+  /**
+   * @description 解析 HTML 对应的 JSONL 路径：先按新规则生成，若不存在则回退匹配历史文件
+   * @param {string} htmlFilePath - HTML 文件路径（绝对或相对）
+   * @returns {Promise<string>} JSONL 文件路径（可能是旧文件路径）
+   */
+  async resolveJsonlPathForHtml(htmlFilePath) {
+    const expected = this.getJsonlPathForHtml(htmlFilePath)
+    if (await this._checkFileExists(expected)) return expected
+
+    // 回退：扫描 memory 目录中与 baseName 相同前缀的文件，读取 metadata.htmlPath 做归一化比对
+    try {
+      if (!this._memoryDirSnapshot) {
+        this._memoryDirSnapshot = await fs.readdir(this.memoryDirectory)
+      }
+      const baseName = path.basename(htmlFilePath, '.html')
+      const candidates = this._memoryDirSnapshot.filter(
+        (f) => f.startsWith(baseName + '_') && f.endsWith('.jsonl')
+      )
+      const targetKey = this._normalizeHtmlKey(htmlFilePath)
+
+      for (const file of candidates) {
+        const p = path.join(this.memoryDirectory, file)
+        try {
+          const content = await fs.readFile(p, 'utf-8')
+          const firstLine = content.trim().split('\n').find(Boolean)
+          if (!firstLine) continue
+          const rec = JSON.parse(firstLine)
+          if (rec.type === 'metadata' && rec.htmlPath) {
+            const metaKey = this._normalizeHtmlKey(rec.htmlPath)
+            if (metaKey === targetKey) {
+              const absolutePath = this._getAbsolutePath(htmlFilePath)
+              this.fileMemoryMap.set(absolutePath, p)
+              return p
+            }
+          }
+        } catch (e) {
+          // 忽略解析失败
+        }
+      }
+    } catch (e) {
+      logger.debug(`回退匹配 JSONL 失败: ${e.message}`)
+    }
+
+    return expected
   }
   
   /**
@@ -300,7 +369,7 @@ class HtmlMemoryManager {
   async startProcessing(htmlFilePath, additionalInfo = {}, lazyMode = false, totalImages = null) {
     try {
       const absolutePath = this._getAbsolutePath(htmlFilePath)
-      const jsonlPath = this.getJsonlPathForHtml(absolutePath)
+      const jsonlPath = await this.resolveJsonlPathForHtml(absolutePath)
       
       // 在懒加载模式下，检查文件是否已存在
       if (lazyMode) {
@@ -392,7 +461,7 @@ class HtmlMemoryManager {
   async appendImageInfo(htmlFilePath, imageInfo) {
     try {
       const absolutePath = this._getAbsolutePath(htmlFilePath)
-      const jsonlPath = this.fileMemoryMap.get(absolutePath) || this.getJsonlPathForHtml(absolutePath)
+      const jsonlPath = this.fileMemoryMap.get(absolutePath) || await this.resolveJsonlPathForHtml(absolutePath)
       
       // 使用新的记录格式，支持快速检查
       const record = {
@@ -428,7 +497,7 @@ class HtmlMemoryManager {
   async completeProcessing(htmlFilePath, additionalInfo = {}) {
     try {
       const absolutePath = this._getAbsolutePath(htmlFilePath)
-      const jsonlPath = this.fileMemoryMap.get(absolutePath) || this.getJsonlPathForHtml(absolutePath)
+      const jsonlPath = this.fileMemoryMap.get(absolutePath) || await this.resolveJsonlPathForHtml(absolutePath)
       
       // 获取已下载的图片信息
       const downloadedImages = await this.getDownloadedImages(htmlFilePath)
@@ -541,7 +610,7 @@ class HtmlMemoryManager {
   async getDownloadedImages(htmlFilePath) {
     try {
       const absolutePath = this._getAbsolutePath(htmlFilePath)
-      const jsonlPath = this.getJsonlPathForHtml(absolutePath)
+      const jsonlPath = await this.resolveJsonlPathForHtml(absolutePath)
       
       // 检查JSONL文件是否存在
       const fileExists = await this._checkFileExists(jsonlPath)
@@ -689,7 +758,7 @@ class HtmlMemoryManager {
   async getFileInfo(htmlFilePath) {
     try {
       const absolutePath = this._getAbsolutePath(htmlFilePath)
-      const jsonlPath = this.fileMemoryMap.get(absolutePath) || this.getJsonlPathForHtml(absolutePath)
+      const jsonlPath = this.fileMemoryMap.get(absolutePath) || await this.resolveJsonlPathForHtml(absolutePath)
       
       // 检查JSONL文件是否存在
       const fileExists = await this._checkFileExists(jsonlPath)
@@ -719,7 +788,7 @@ class HtmlMemoryManager {
   async clearFileMemory(htmlFilePath) {
     try {
       const absolutePath = this._getAbsolutePath(htmlFilePath)
-      const jsonlPath = this.getJsonlPathForHtml(absolutePath)
+      const jsonlPath = await this.resolveJsonlPathForHtml(absolutePath)
       
       // 删除JSONL文件
       await this._safeDeleteFile(jsonlPath)
