@@ -60,7 +60,13 @@ const scraperConfig = {
     userAgent: null,            // 自定义 User Agent
     randomizeFingerprint: false // 随机化浏览器指纹
   },
-  // 其他配置...
+
+  // 下载与重试（单位统一为毫秒）
+  maxRetries: 5,
+  retryDelayMs: 5000,
+  concurrentDownloads: 10,
+  minRequestDelayMs: 2000,
+  maxRequestDelayMs: 4000,
 }
 ```
 
@@ -71,7 +77,21 @@ const scraperConfig = {
   scrapeMode: 'local_html',
   htmlDirectory: './html',
   imageMode: 'originals_only',
-  // 其他配置...
+  
+  // 记忆功能（推荐开启）
+  enableMemory: true,
+  memoryDirectory: './memory',
+  forceReprocess: false,
+  lazyMemoryCreation: true,
+  maxFilesPerRun: 200,
+  confirmLargeRun: false,
+
+  // 下载与重试（单位统一为毫秒）
+  maxRetries: 5,
+  retryDelayMs: 5000,
+  concurrentDownloads: 10,
+  minRequestDelayMs: 2000,
+  maxRequestDelayMs: 4000,
 }
 ```
 
@@ -96,7 +116,12 @@ node index.js
 | `htmlDirectory` | HTML文件目录 | 相对或绝对路径 |
 | `outputDirectory` | 输出目录 | 默认为 `./download` |
 | `concurrentDownloads` | 并发下载数 | 数字，默认10 |
-| `maxRetries` | 最大重试次数 | 数字，默认3 |
+| `maxRetries` | 最大重试次数 | 数字，默认5 |
+| `retryDelayMs` | 重试间隔（毫秒） | 数字，默认5000 |
+| `minRequestDelayMs` | 批次最小延迟（毫秒） | 数字，默认2000 |
+| `maxRequestDelayMs` | 批次最大延迟（毫秒） | 数字，默认4000 |
+
+> 说明：旧字段 `retryDelaySeconds` 已弃用，仍被兼容为毫秒转换；请迁移到 `retryDelayMs`。
 
 ## 目录结构
 
@@ -138,24 +163,10 @@ thumb2original/
 ## 📚 详细文档
 
 - [本地HTML爬虫模式使用说明](./LOCAL_HTML_MODE.md)
-- [🛡️ 反检测功能使用指南](./ANTI_DETECTION.md) - **新增**
-- [🔧 imx.to 域名 503 错误解决方案](./IMX_TO_503_FIX.md) - **新增**
-- [HTML文件排序说明](./HTML_SORT_ORDER.md)
-
-## 🔧 故障排除
-
-### 反爬虫拦截问题
-如果遇到反爬虫拦截问题，请参考 [反检测功能使用指南](./ANTI_DETECTION.md) 进行配置调整。
-
-### 503 错误问题
-如果在下载 imx.to 域名图片时遇到 503 Service Temporarily Unavailable 错误，请参考 [imx.to 域名 503 错误解决方案](./IMX_TO_503_FIX.md)。
 
 ## 开发和调试
 
 ```bash
-# 开发模式运行
-npm run serve
-
 # 直接运行主入口
 node index.js
 ```
