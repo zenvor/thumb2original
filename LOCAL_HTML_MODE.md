@@ -23,9 +23,19 @@ const scraperConfig = {
   htmlSortOrder: 'name', // 'name' | 'mtime_asc' | 'mtime_desc'
   
   // 记忆功能配置
-  enableMemory: true, // 是否启用记忆功能，跳过已处理的HTML文件
-  memoryDirectory: './memory', // 记忆目录路径
-  forceReprocess: false, // 是否强制重新处理所有文件（忽略记忆）
+  enableMemory: true,            // 是否启用记忆功能（推荐开启）
+  memoryDirectory: './memory',   // 记忆目录路径
+  forceReprocess: false,         // 是否强制重新处理所有文件（忽略记忆）
+  lazyMemoryCreation: true,      // 懒加载模式：仅在实际处理该HTML时创建 JSONL
+  maxFilesPerRun: 200,           // 每次运行最大处理文件数（0 表示无限制）
+  confirmLargeRun: false,        // 当检测到 >100 个HTML 文件时是否交互确认
+  
+  // 下载与重试（单位统一为毫秒）
+  maxRetries: 5,
+  retryDelayMs: 5000,            // 统一使用毫秒；旧字段 retryDelaySeconds 已弃用
+  concurrentDownloads: 10,
+  minRequestDelayMs: 2000,
+  maxRequestDelayMs: 4000,
   
   // 其他配置保持不变...
 }
@@ -42,6 +52,38 @@ const scraperConfig = {
 4. **下载管理**：使用与网络爬虫相同的下载逻辑，包括并发控制、重试机制等
 
 5. **文件组织**：每个HTML文件的图片会下载到独立的文件夹中，文件夹名称格式为：`页面标题_HTML文件名`
+
+## 配置项详细说明（本地 HTML 模式）
+
+- htmlDirectory：扫描根目录，支持递归子目录
+- htmlSortOrder：排序方式
+  - 'name'：按文件名排序（默认）
+  - 'mtime_asc'：按修改时间从旧到新
+  - 'mtime_desc'：按修改时间从新到旧
+- enableMemory：开启后为每个 HTML 维护独立 JSONL 记录，避免重复处理、支持断点续传与增量下载
+- memoryDirectory：记忆文件保存位置，默认 `./memory`
+- forceReprocess：忽略既有记忆记录，全部重来
+- lazyMemoryCreation：懒加载创建 JSONL，减少一次性大量空文件
+- maxFilesPerRun：限制单次运行处理的 HTML 数量，利于分批处理
+- confirmLargeRun：当检测到 >100 个 HTML 文件时进行交互确认（设置为 false 可跳过提示）
+- 重试与节流相关（单位为毫秒）
+  - retryDelayMs：重试间隔（新字段，默认 5000ms）。旧字段 `retryDelaySeconds` 已弃用但仍被兼容为毫秒转换
+  - minRequestDelayMs/maxRequestDelayMs：批次间随机延迟范围
+  - concurrentDownloads：并发下载数量
+  - maxRetries：最大重试次数
+
+## 执行过程细节
+
+- 批量预检查：在启用记忆时，会先做批量预检查（已完成/部分下载/待处理），优先处理“部分下载”以实现断点续传
+- 增量下载：对已处理过的 HTML，自动过滤已下载的图片 URL，仅下载缺失部分
+- 懒加载模式：当 `lazyMemoryCreation` 为 true 时，仅在首次处理该 HTML 时才创建 JSONL，降低初次运行的文件写入量
+- 大量文件确认：当 `confirmLargeRun` 为 true 且文件数 > 100 时，会提示是否继续，可通过将其设为 false 关闭交互
+
+## JSONL 记忆文件
+
+- 命名：`<html基础文件名>_<hash8位>.jsonl`，保存在 `memoryDirectory`
+- 结构：首行为 `metadata`（包含 `totalImages` 等），其后为 `start`/`image`/`complete` 等记录
+- 索引：内部维护索引映射用于快速回溯，不需要手动管理
 
 ## 目录结构示例
 
@@ -121,6 +163,7 @@ forceReprocess: true
 
 ## 注意事项
 
+- 时间单位说明：文档涉及的延迟/重试相关项均使用毫秒（ms）
 - 确保 `htmlDirectory` 路径正确且存在
 - HTML文件中的图片URL应该是有效的网络地址
 - 大量HTML文件处理可能需要较长时间，请耐心等待
