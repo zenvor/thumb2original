@@ -11,6 +11,7 @@ import {
   processLocalHtmlMode 
 } from './lib/htmlProcessor.js'
 import { scrapeUrl } from './lib/downloadManager.js'
+import { toLogMeta } from './utils/errors.js'
 
 /**
  * @description 主函数，根据配置启动图片抓取器。
@@ -31,7 +32,7 @@ async function runImageScraper(config) {
     browser = launched.browser
     stopMonitoring = launched.stopMonitoring
   } catch (e) {
-    logger.error(`无法启动浏览器，程序将退出：${e.message}`)
+    logger.error(`无法启动浏览器，程序将退出：${e.message}`,'system', toLogMeta(e))
     return
   }
 
@@ -64,7 +65,7 @@ async function runImageScraper(config) {
       }
     }
   } catch (error) {
-    logger.error(`发生了一个严重错误: ${error.message}`)
+    logger.error(`发生了一个严重错误: ${error.message}`, 'system', toLogMeta(error))
   } finally {
     // 根据配置决定是否停止进度模式
     const logConfig = logger.getConfig();
@@ -78,7 +79,7 @@ async function runImageScraper(config) {
         await browser.close()
         logger.info('浏览器已关闭。')
       } catch (closeError) {
-        logger.error(`关闭浏览器时发生错误: ${closeError.message}`)
+        logger.error(`关闭浏览器时发生错误: ${closeError.message}`, 'system', toLogMeta(closeError))
       }
     }
     const duration = (Date.now() - startTime) / 1000
