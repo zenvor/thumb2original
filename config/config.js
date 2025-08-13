@@ -48,6 +48,44 @@ export const siteConfigs = {
  * 爬虫配置文件
  * ===================================================================================
  */
+/**
+ * @typedef {Object} ScraperConfig
+ * @property {'single_page'|'multiple_pages'|'local_html'} scrapeMode 抓取模式
+ * @property {'all'|'originals_only'} imageMode 图片模式
+ * @property {string} [htmlDirectory]
+ * @property {'name'|'mtime_asc'|'mtime_desc'} [htmlSortOrder]
+ * @property {boolean} [enableMemory]
+ * @property {string} [memoryDirectory]
+ * @property {boolean} [forceReprocess]
+ * @property {boolean} [lazyMemoryCreation]
+ * @property {number} [maxFilesPerRun]
+ * @property {boolean} [confirmLargeRun]
+ * @property {{
+ *   enableStealth?: boolean,
+ *   enableAdvancedArgs?: boolean,
+ *   windowSize?: string,
+ *   userAgent?: string|null,
+ *   randomizeFingerprint?: boolean
+ * }} [antiDetection]
+ * @property {string} [targetUrl]
+ * @property {string[]} [targetUrls]
+ * @property {string} [outputDirectory]
+ * @property {number} [maxRetries]
+ * @property {number} [retryDelayMs] 重试间隔（毫秒）
+ * @property {number} [concurrentDownloads]
+ * @property {number} [minRequestDelayMs]
+ * @property {number} [maxRequestDelayMs]
+ * @property {{
+ *   pageTimeout?: number,
+ *   navigationTimeout?: number,
+ *   maxPageRetries?: number,
+ *   retryDelay?: number,
+ *   enableErrorRecovery?: boolean,
+ *   connectionCheckInterval?: number
+ * }} [stability]
+ */
+
+/** @type {ScraperConfig} */
 export const scraperConfig = {
   // --- 核心模式 ---
   scrapeMode: 'single_page', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
@@ -85,7 +123,7 @@ export const scraperConfig = {
   // --- 下载行为 ---
   outputDirectory: '/Volumes/PSSD/外部/picture/download', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
   maxRetries: 5, // 下载失败后的最大重试次数
-  retryDelaySeconds: 5, // 每次重试的间隔时间 (秒)
+  retryDelayMs: 5000, // 每次重试的间隔时间 (毫秒)
 
   // --- 性能与反爬虫 ---
   concurrentDownloads: 10, // 并发下载数 (降低并发以避免 503 错误)

@@ -134,7 +134,7 @@ function pushToRingBuffer(line) {
  * @param {string} category - 日志分类
  * @param {string} color - 颜色代码
  */
-function log(level, message, category = LOG_CATEGORIES.SYSTEM, color = COLORS.reset) {
+function log(level, message, category = LOG_CATEGORIES.SYSTEM, color = COLORS.reset, meta) {
   // 检查分类是否启用
   if (!enabledCategories.includes(category)) {
     return;
@@ -142,6 +142,9 @@ function log(level, message, category = LOG_CATEGORIES.SYSTEM, color = COLORS.re
   
   // 构建日志对象，包含分类信息
   const logObject = { category, msg: message };
+  if (meta && typeof meta === 'object') {
+    Object.assign(logObject, meta);
+  }
   
   // 写入文件日志
   pinoLogger[level](logObject);
@@ -175,23 +178,23 @@ function getColoredLevel(level, color) {
 // 导出日志接口
 export const logger = {
   // 基础日志方法
-  debug: (message, category = LOG_CATEGORIES.SYSTEM) => 
-    log('debug', message, category, COLORS.gray),
+  debug: (message, category = LOG_CATEGORIES.SYSTEM, meta) => 
+    log('debug', message, category, COLORS.gray, meta),
   
-  info: (message, category = LOG_CATEGORIES.SYSTEM) => 
-    log('info', message, category, COLORS.cyan),
+  info: (message, category = LOG_CATEGORIES.SYSTEM, meta) => 
+    log('info', message, category, COLORS.cyan, meta),
   
-  success: (message, category = LOG_CATEGORIES.SYSTEM) => 
-    log('info', message, category, COLORS.green),
+  success: (message, category = LOG_CATEGORIES.SYSTEM, meta) => 
+    log('info', message, category, COLORS.green, meta),
   
-  warn: (message, category = LOG_CATEGORIES.SYSTEM) => 
-    log('warn', message, category, COLORS.yellow),
+  warn: (message, category = LOG_CATEGORIES.SYSTEM, meta) => 
+    log('warn', message, category, COLORS.yellow, meta),
   
-  error: (message, category = LOG_CATEGORIES.SYSTEM) => 
-    log('error', message, category, COLORS.red),
+  error: (message, category = LOG_CATEGORIES.SYSTEM, meta) => 
+    log('error', message, category, COLORS.red, meta),
   
-  header: (message, category = LOG_CATEGORIES.SYSTEM) => 
-    log('info', message, category, `${COLORS.blue}${COLORS.bright}`),
+  header: (message, category = LOG_CATEGORIES.SYSTEM, meta) => 
+    log('info', message, category, `${COLORS.blue}${COLORS.bright}`, meta),
     
   // 网络相关日志快捷方法
   network: (message) => 
