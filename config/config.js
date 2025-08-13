@@ -9,7 +9,7 @@ export const siteConfigs = {
     selectorWaitTime: 30000, // 等待元素加载时间 (毫秒) - 增加到大图片处理
     needsReferer: true, // 是否需要添加 Referer 头
     refererUrl: 'https://imx.to/', // Referer 头的值
-    useAxiosFirst: false, // 是否优先使用 Axios 进行请求
+    downloadStrategy: 'puppeteer', // 下载优先策略: 'axios' | 'puppeteer'
     // 针对 imx.to 的完整请求头配置，解决 503 错误
     customHeaders: {
       // 修复 Accept 头中的错字，防止服务端解析异常
@@ -33,13 +33,13 @@ export const siteConfigs = {
     waitTime: 2000,
     selectorWaitTime: 5000,
     needsReferer: false,
-    useAxiosFirst: true
+    downloadStrategy: 'axios'
   },
   'default': {
     waitTime: 5000, // 增加默认等待时间以处理大图片
     selectorWaitTime: 15000, // 增加默认选择器等待时间以处理大图片
     needsReferer: false,
-    useAxiosFirst: false
+    downloadStrategy: 'axios'
   }
 }
 
@@ -51,7 +51,7 @@ export const siteConfigs = {
 export const scraperConfig = {
   // --- 核心模式 ---
   scrapeMode: 'single_page', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
-  imageMode: 'all', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
+  imageMode: 'originals_only', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
 
   // --- 本地HTML爬虫模式配置 ---
   htmlDirectory: './html', // 本地HTML文件目录路径
