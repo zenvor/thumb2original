@@ -43,6 +43,8 @@ class HtmlMemoryManager {
     try {
       await fs.mkdir(this.memoryDirectory, { recursive: true })
       logger.info(`记忆目录已创建: ${this.memoryDirectory}`)
+      // 尝试加载已持久化的索引
+      await this._loadIndex()
     } catch (error) {
       logger.error(`创建记忆目录失败: ${error.message}`)
       throw error
@@ -282,12 +284,127 @@ class HtmlMemoryManager {
   }
 
   /**
+   * @description 计算索引文件路径
+   * @returns {string}
+   * @private
+   */
+  _getIndexFilePath() {
+    return path.join(this.memoryDirectory, 'index.json')
+  }
+
+  /**
+   * @description 加载持久化索引（htmlKey -> jsonlPath），无则忽略
+   * @private
+   */
+  async _loadIndex() {
+    try {
+      const indexPath = this._getIndexFilePath()
+      const exists = await this._checkFileExists(indexPath)
+      if (!exists) return
+      const content = await fs.readFile(indexPath, 'utf-8')
+      const data = JSON.parse(content)
+      let loaded = 0
+      for (const [key, jsonlPath] of Object.entries(data || {})) {
+        if (typeof key !== 'string' || typeof jsonlPath !== 'string') continue
+        if (await this._checkFileExists(jsonlPath)) {
+          this._indexMap.set(key, jsonlPath)
+          loaded++
+        }
+      }
+      if (loaded > 0) {
+        logger.info(`已加载索引映射 ${loaded} 项`)
+      }
+    } catch (error) {
+      logger.warn(`加载索引映射失败: ${error.message}`)
+    }
+  }
+
+  /**
+   * @description 更新索引并调度刷盘；存在冲突时按 mtime 较新者取
+   * @private
+   */
+  async _updateIndexMapping(htmlKey, jsonlPath) {
+    try {
+      if (!this._indexMap) this._indexMap = new Map()
+      const existing = this._indexMap.get(htmlKey)
+      if (existing && existing !== jsonlPath) {
+        try {
+          const [a, b] = await Promise.all([
+            fs.stat(existing).catch(() => null),
+            fs.stat(jsonlPath).catch(() => null),
+          ])
+          const pick = b && (!a || b.mtimeMs >= a.mtimeMs) ? jsonlPath : existing
+          if (pick !== existing) {
+            logger.info(`索引冲突，采用较新文件: ${path.basename(jsonlPath)}`)
+            this._indexMap.set(htmlKey, pick)
+          }
+        } catch {
+          this._indexMap.set(htmlKey, jsonlPath)
+        }
+      } else {
+        this._indexMap.set(htmlKey, jsonlPath)
+      }
+    } catch {
+      // 保底写入
+      this._indexMap.set(htmlKey, jsonlPath)
+    }
+    this._scheduleSaveIndex()
+  }
+
+  /**
+   * @description 调度索引刷盘（去抖）
+   * @private
+   */
+  _scheduleSaveIndex() {
+    try {
+      if (!this._saveIndexDebounceMs) this._saveIndexDebounceMs = 2000
+      if (this._saveIndexTimer) clearTimeout(this._saveIndexTimer)
+      this._saveIndexTimer = setTimeout(() => {
+        this._flushIndex().catch((e) => logger.warn(`写入索引失败: ${e.message}`))
+        this._saveIndexTimer = null
+      }, this._saveIndexDebounceMs)
+    } catch {}
+  }
+
+  /**
+   * @description 将索引原子写入磁盘
+   * @private
+   */
+  async _flushIndex() {
+    try {
+      const indexPath = this._getIndexFilePath()
+      const tmpPath = indexPath + '.tmp'
+      const obj = Object.fromEntries((this._indexMap || new Map()).entries())
+      const json = JSON.stringify(obj, null, 2)
+      await fs.writeFile(tmpPath, json, 'utf-8')
+      await fs.rename(tmpPath, indexPath)
+    } catch (error) {
+      logger.warn(`写入索引失败: ${error.message}`)
+    }
+  }
+
+  /**
    * @description 解析 HTML 对应的 JSONL 路径：先按新规则生成，若不存在则回退匹配历史文件
    * @param {string} htmlFilePath - HTML 文件路径（绝对或相对）
    * @returns {Promise<string>} JSONL 文件路径（可能是旧文件路径）
    */
   async resolveJsonlPathForHtml(htmlFilePath) {
     const expected = this.getJsonlPathForHtml(htmlFilePath)
+    const key = this._normalizeHtmlKey(htmlFilePath)
+
+    // 1) 先查持久化索引映射
+    const indexedPath = this._indexMap?.get?.(key)
+    if (indexedPath) {
+      if (await this._checkFileExists(indexedPath)) {
+        const absolutePath = this._getAbsolutePath(htmlFilePath)
+        this.fileMemoryMap.set(absolutePath, indexedPath)
+        return indexedPath
+      } else {
+        // 记录已失效，删除并稍后保存
+        this._indexMap.delete(key)
+        this._scheduleSaveIndex()
+      }
+    }
     if (await this._checkFileExists(expected)) return expected
 
     // 回退：扫描 memory 目录中与 baseName 相同前缀的文件，读取 metadata.htmlPath 做归一化比对
@@ -296,9 +413,17 @@ class HtmlMemoryManager {
         this._memoryDirSnapshot = await fs.readdir(this.memoryDirectory)
       }
       const baseName = path.basename(htmlFilePath, '.html')
-      const candidates = this._memoryDirSnapshot.filter(
+      let candidates = this._memoryDirSnapshot.filter(
         (f) => f.startsWith(baseName + '_') && f.endsWith('.jsonl')
       )
+      // 如果快照为空或未命中，刷新一次快照
+      if (candidates.length === 0) {
+        try {
+          const fresh = await fs.readdir(this.memoryDirectory)
+          this._memoryDirSnapshot = fresh
+          candidates = fresh.filter((f) => f.startsWith(baseName + '_') && f.endsWith('.jsonl'))
+        } catch {}
+      }
       const targetKey = this._normalizeHtmlKey(htmlFilePath)
 
       for (const file of candidates) {
@@ -313,6 +438,8 @@ class HtmlMemoryManager {
             if (metaKey === targetKey) {
               const absolutePath = this._getAbsolutePath(htmlFilePath)
               this.fileMemoryMap.set(absolutePath, p)
+              // 更新索引映射并异步刷盘
+              await this._updateIndexMapping(targetKey, p)
               return p
             }
           }
