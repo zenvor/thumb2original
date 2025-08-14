@@ -1,5 +1,6 @@
 import sharp from 'sharp'
 import { logger } from './logger.js'
+import { parse } from 'svg-parser'
 
 // 支持的图片格式常量
 export const SUPPORTED_FORMATS = {
@@ -9,7 +10,9 @@ export const SUPPORTED_FORMATS = {
   WEBP: 'webp',
   BMP: 'bmp',
   TIFF: 'tiff',
-  SVG: 'svg'
+  SVG: 'svg',
+  AVIF: 'avif',
+  ICO: 'ico'
 }
 
 // 图片质量配置
@@ -58,6 +61,16 @@ export function identifyImageFormat(buffer) {
   // TIFF (Big Endian)
   if (buffer[0] === 0x4d && buffer[1] === 0x4d && buffer[2] === 0x00 && buffer[3] === 0x2a) return SUPPORTED_FORMATS.TIFF
   
+  // AVIF (ISO BMFF: ftyp + 'avif' brand)
+  // 参考: ISO Base Media File Format，常见文件头包含 'ftyp' 和 brand 'avif'
+  if (
+    buffer[4] === 0x66 && buffer[5] === 0x74 && buffer[6] === 0x79 && buffer[7] === 0x70 &&
+    buffer[8] === 0x61 && buffer[9] === 0x76 && buffer[10] === 0x69 && buffer[11] === 0x66
+  ) return SUPPORTED_FORMATS.AVIF
+
+  // ICO (小端: 00 00 01 00)
+  if (buffer[0] === 0x00 && buffer[1] === 0x00 && buffer[2] === 0x01 && buffer[3] === 0x00) return SUPPORTED_FORMATS.ICO
+
   // SVG
   const svgStart = buffer.toString('utf8', 0, Math.min(100, buffer.length)).toLowerCase()
   if (svgStart.includes('<svg') || svgStart.includes('<?xml')) return SUPPORTED_FORMATS.SVG
@@ -73,9 +86,45 @@ export function identifyImageFormat(buffer) {
 export async function getImageMetadata(buffer) {
   try {
     const metadata = await sharp(buffer).metadata()
+    // 中文注释：当 SVG 等格式缺少尺寸时，尝试使用 svg-parser 解析 viewBox/width/height 兜底
+    let width = metadata.width
+    let height = metadata.height
+    if ((!width || !height) && identifyImageFormat(buffer) === SUPPORTED_FORMATS.SVG) {
+      try {
+        const text = buffer.toString('utf8')
+        const ast = parse(text)
+        const svgNode = ast.children?.find?.((n) => n.tagName === 'svg') || ast.children?.[0]
+        if (svgNode && svgNode.properties) {
+          const props = svgNode.properties
+          const vb = (props.viewBox || props.viewbox || '').toString().trim()
+          const wAttr = props.width
+          const hAttr = props.height
+          // 优先 width/height；其次解析 viewBox 的 3、4 项
+          const parseSize = (v) => {
+            if (!v) return null
+            const m = v.toString().match(/([\d.]+)/)
+            return m ? Math.round(parseFloat(m[1])) : null
+          }
+          const w = parseSize(wAttr)
+          const h = parseSize(hAttr)
+          if (w && h) {
+            width = width || w
+            height = height || h
+          } else if (vb) {
+            const parts = vb.split(/[ ,]+/).map((x) => parseFloat(x))
+            if (parts.length === 4 && Number.isFinite(parts[2]) && Number.isFinite(parts[3])) {
+              width = width || Math.round(parts[2])
+              height = height || Math.round(parts[3])
+            }
+          }
+        }
+      } catch (e) {
+        logger.debug(`SVG 尺寸兜底解析失败: ${e.message}`)
+      }
+    }
     return {
-      width: metadata.width,
-      height: metadata.height,
+      width,
+      height,
       format: metadata.format,
       size: buffer.length,
       channels: metadata.channels,
