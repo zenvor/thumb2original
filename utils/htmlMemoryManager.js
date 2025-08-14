@@ -2,6 +2,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import crypto from 'crypto'
 import sizeOf from 'image-size'
+import { getImageMetadata } from './imageUtils.js'
 import { logger } from './logger.js'
 
 /**
@@ -703,7 +704,16 @@ class HtmlMemoryManager {
       const buffer = await fs.readFile(imagePath)
       
       // 使用 buffer 而不是文件路径来避免 ArrayBuffer 错误
-      const dimensions = sizeOf(buffer)
+      let dimensions = sizeOf(buffer)
+      // 中文注释：当尺寸信息缺失或不可用时，尝试通过 getImageMetadata (含 SVG 兜底解析) 获取尺寸
+      if (!dimensions || !dimensions.width || !dimensions.height) {
+        try {
+          const meta = await getImageMetadata(buffer)
+          if (meta && meta.width && meta.height) {
+            dimensions = { width: meta.width, height: meta.height }
+          }
+        } catch {}
+      }
       
       return {
         name: fileName,

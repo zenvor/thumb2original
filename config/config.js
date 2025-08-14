@@ -39,7 +39,7 @@ export const siteConfigs = {
     waitTime: 5000, // 增加默认等待时间以处理大图片
     selectorWaitTime: 15000, // 增加默认选择器等待时间以处理大图片
     needsReferer: false,
-    downloadStrategy: 'axios'
+    downloadStrategy: 'puppeteer'
   }
 }
 
@@ -83,13 +83,32 @@ export const siteConfigs = {
  *   enableErrorRecovery?: boolean,
  *   connectionCheckInterval?: number
  * }} [stability]
+ * @property {{
+ *   includeInlineSvg?: boolean,
+ *   includeFavicon?: boolean,
+ *   includeCssBackgrounds?: boolean,
+ *   includeDataUri?: boolean
+ * }} [imageDiscovery]
+ * @property {{
+ *   enableConversion?: boolean,
+ *   // 全局转换策略：将所有图片统一转换为指定格式；'none' 表示不转换
+ *   convertTo?: 'jpeg'|'png'|'webp'|'tiff'|'none'
+ * }} [format]
  */
 
 /** @type {ScraperConfig} */
 export const scraperConfig = {
   // --- 核心模式 ---
   scrapeMode: 'single_page', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
-  imageMode: 'originals_only', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
+  imageMode: 'all', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
+
+  // --- 图片发现范围（可控开关） ---
+  imageDiscovery: {
+    includeInlineSvg: true, // 是否包含内联 SVG（仅当能解析出外链或 data 引用时有效）
+    includeFavicon: true, // 是否包含网站 favicon（link rel="icon" 等）
+    includeCssBackgrounds: true, // 是否解析 CSS background-image/url(...) 与 --svg 变量
+    includeDataUri: true // 是否包含 data:image/* URI（可能带来噪声，默认关闭）
+  },
 
   // --- 本地HTML爬虫模式配置 ---
   htmlDirectory: './html', // 本地HTML文件目录路径
@@ -113,7 +132,7 @@ export const scraperConfig = {
   },
 
   // --- 目标 URL ---
-  targetUrl: 'https://www.duitang.com/category/?cat=wallpaper', // 目标网址 (单页模式)
+  targetUrl: 'https://nuxt.com/', // 目标网址 (单页模式)
   targetUrls: [
     // 目标网址列表 (多页模式)
     'https://www.duitang.com/category/?cat=wallpaper',
@@ -121,7 +140,8 @@ export const scraperConfig = {
   ],
 
   // --- 下载行为 ---
-  outputDirectory: '/Volumes/PSSD/外部/picture/download', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
+  // outputDirectory: '/Volumes/PSSD/外部/picture/download', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
+  outputDirectory: '', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
   maxRetries: 5, // 下载失败后的最大重试次数
   retryDelayMs: 5000, // 每次重试的间隔时间 (毫秒)
 
@@ -138,6 +158,15 @@ export const scraperConfig = {
     retryDelay: 2000, // 重试间隔时间 (毫秒)
     enableErrorRecovery: true, // 是否启用错误恢复机制
     connectionCheckInterval: 30000 // 浏览器连接检查间隔 (毫秒)
+  },
+
+  // --- 图片格式处理 ---
+  format: {
+    // 是否启用图像格式转换（全局开关）
+    enableConversion: true,
+    // 全局转换策略：'jpeg' | 'png' | 'webp' | 'tiff' | 'none'
+    // 默认统一转换为 PNG（与历史默认“WebP→PNG”对齐，同时提供全局统一策略）
+    convertTo: 'png'
   }
 }
 
