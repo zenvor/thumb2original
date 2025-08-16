@@ -4,11 +4,11 @@ import { defaultLogConfig } from './config/logConfig.js'
 import { validateAndNormalizeConfig } from './lib/configValidator.js'
 import { launchBrowser } from './lib/browserLauncher.js'
 import { downloadManager } from './lib/downloadManager.js'
-import { 
-  loadAndScrollPage, 
-  extractImageUrls, 
-  processUrlsByImageMode, 
-  processLocalHtmlMode 
+import {
+  loadAndScrollPage,
+  extractImageUrls,
+  processUrlsByImageMode,
+  processLocalHtmlMode,
 } from './lib/htmlProcessor.js'
 import { scrapeUrl } from './lib/downloadManager.js'
 import { toLogMeta } from './utils/errors.js'
@@ -19,8 +19,8 @@ import { toLogMeta } from './utils/errors.js'
  */
 async function runImageScraper(config) {
   // 初始化日志配置
-  logger.initConfig(defaultLogConfig);
-  logger.info('日志系统已初始化', 'system');
+  logger.initConfig(defaultLogConfig)
+  logger.info('日志系统已初始化', 'system')
 
   // 配置校验与默认值填充
   config = await validateAndNormalizeConfig(config)
@@ -32,19 +32,19 @@ async function runImageScraper(config) {
     browser = launched.browser
     stopMonitoring = launched.stopMonitoring
   } catch (e) {
-    logger.error(`无法启动浏览器，程序将退出：${e.message}`,'system', toLogMeta(e))
+    logger.error(`无法启动浏览器，程序将退出：${e.message}`, 'system', toLogMeta(e))
     return
   }
 
   const startTime = Date.now()
-  
+
   // 根据配置决定是否启动进度模式
-  const logConfig = logger.getConfig();
+  const logConfig = logger.getConfig()
   if (logConfig.showDownloadProgress) {
-    logger.info('启动进度显示模式', 'system');
-    logger.startProgress();
+    logger.info('启动进度显示模式', 'system')
+    logger.startProgress()
   } else {
-    logger.info('进度显示已禁用，使用普通日志模式', 'system');
+    logger.info('进度显示已禁用，使用普通日志模式', 'system')
   }
 
   try {
@@ -68,12 +68,14 @@ async function runImageScraper(config) {
     logger.error(`发生了一个严重错误: ${error.message}`, 'system', toLogMeta(error))
   } finally {
     // 根据配置决定是否停止进度模式
-    const logConfig = logger.getConfig();
+    const logConfig = logger.getConfig()
     if (logConfig.showDownloadProgress) {
-      logger.stopProgress();
+      logger.stopProgress()
     }
     // 清理连接监控器
-    try { stopMonitoring && stopMonitoring() } catch {}
+    try {
+      stopMonitoring && stopMonitoring()
+    } catch {}
     if (browser) {
       try {
         await browser.close()

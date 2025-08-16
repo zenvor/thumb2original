@@ -92,6 +92,8 @@ export const siteConfigs = {
  * @property {{
  *   enableConversion?: boolean,
  *   // 全局转换策略：将所有图片统一转换为指定格式；'none' 表示不转换
+ *   // 支持的目标格式：'jpeg' | 'png' | 'webp' | 'tiff' | 'none'
+ *   // 说明：SVG/AVIF 目前仅做格式识别，不参与 convert（sharp 不直接支持 SVG→位图；AVIF 识别但此处未启用 AVIF 输出）。
  *   convertTo?: 'jpeg'|'png'|'webp'|'tiff'|'none'
  * }} [format]
  */
@@ -140,8 +142,8 @@ export const scraperConfig = {
   ],
 
   // --- 下载行为 ---
-  // outputDirectory: '/Volumes/PSSD/外部/picture/download', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
-  outputDirectory: '', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
+  outputDirectory: '/Volumes/PSSD/外部/picture/download', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
+  // outputDirectory: '', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
   maxRetries: 5, // 下载失败后的最大重试次数
   retryDelayMs: 5000, // 每次重试的间隔时间 (毫秒)
 
@@ -165,10 +167,49 @@ export const scraperConfig = {
     // 是否启用图像格式转换（全局开关）
     enableConversion: true,
     // 全局转换策略：'jpeg' | 'png' | 'webp' | 'tiff' | 'none'
+    // 说明：SVG/AVIF 会被识别用于统计，但不做格式转换（仅识别不转换）。
     // 默认统一转换为 PNG（与历史默认“WebP→PNG”对齐，同时提供全局统一策略）
-    convertTo: 'png'
+    convertTo: 'none'
+  },
+
+  // --- 图片分析（P0 预留并启用） ---
+  analysis: {
+    // 预设模式（后续映射在校验器中实现）：'strict' | 'balanced' | 'loose'
+    preset: 'balanced',
+    // 开启严格模式：元数据解析异常将直接判定为 metadata_error 已确认默认行为，无需必填
+    // strictValidation: false, 
+    enableDetailLog: false,
+    // P1：可观测性 - 是否输出每张分析耗时的 debug 日志
+    logAnalyzeCost: false,
+    sampleRate: 100,
+    // 显式覆盖动态采样 
+    /** 
+     * 小建议
+     * 小批量想看更细日志：设置较小值（例如 50）。
+     * 大批量想降噪固定间隔：设置较大值（例如 1000）。
+     * 若不配置，则自动根据任务规模动态调整，无需手动干预。
+     */
+    // effectiveSampleRate: 500,  // ≥1 的正数，小值=更频繁日志
+    timeoutMs: 10000,
+    minBufferSize: 100,
+    maxAnalyzableSizeInMB: 50,
+    // P1：超过该阈值视为“耗时较长”样本，输出 info 级日志
+    longCostWarnMs: 2000,
+    // P1：axios 放宽二进制类型接受；true 为允许常见二进制与缺失 content-type
+    acceptBinaryContentTypes: true,
+    // P2：twoPhase 模式配置（默认 inline）
+    mode: 'inline',
+    tempDir: './.tmp_analysis',
+    cleanupTempOnComplete: true,
+    // 冷启动清理与内存持有（按需调整）
+    cleanupTempOnStart: true,
+    maxHoldBuffers: 0
   }
 }
+
+// 测试与开发者指南：
+// - 统一的测试说明与最佳实践（mockClear vs mockReset 等）请参考 ../tests/TESTING_GUIDE.md
+// - 统计口径：最终格式统计由 lib/fileManager.js/saveImage() 在“实际落盘后的最终格式”上计数，twoPhase/重试模式下通过共享引用对象聚合。
 
 /**
  * @description 根据 URL 获取网站配置。
