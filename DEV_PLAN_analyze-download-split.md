@@ -53,7 +53,7 @@
   - `lib/scraperOrchestrator.js` 的 `orchestrateDownload` 创建下载目录并调用队列处理。
 - 队列与单元处理
   - `lib/downloadQueue.js` 的 `processDownloadQueue` 内部执行并发分批下载：
-    - 为每个 url 调用 `lib/imageDownloader.js::fetchImage`（axios/puppeteer 二选一，必要时递归 html）。
+    - 为每个 url 调用 `lib/imageFetcher.js::fetchImage`（axios/puppeteer 二选一，必要时递归 html）。
     - 命名：`lib/fileManager.js::generateFileName`
     - 写盘：`lib/fileManager.js::saveImage`（包含格式统一转换 `format.convertTo` 和统计回写）。
 - 图像工具
@@ -126,12 +126,12 @@
   - 分析成功后：增加分析计数，并输出每张图片的分析详情（格式、尺寸、大小等）
   - 现有进度显示：扩展显示分析进度，实时展示已分析数量与总数的比例
 
-  - （可选增强）若 `axios` 分支需要更宽松的内容类型接受范围：在 `lib/downloader/axiosDownloader.js` 增加配置项 `acceptBinaryContentTypes`（可为布尔或字符串数组，默认启用内建白名单），与上述白名单一致，并接受缺失 `content-type` 的情况。
+  - （可选增强）若 `axios` 分支需要更宽松的内容类型接受范围：在 `lib/fetcher/axiosFetcher.js` 增加配置项 `acceptBinaryContentTypes`（可为布尔或字符串数组，默认启用内建白名单），与上述白名单一致，并接受缺失 `content-type` 的情况。
   - 头部白名单仅作“快速放行/拒绝”的提示层；最终裁决在分析阶段基于 buffer 嗅探与元数据判定。
   - 传递分析结果以避免重复分析：`analyzeImage` 成功后返回 `analysisResult`，在调用 `saveImage` 时以新增的可选参数传入：`saveImage(buffer, filePath, imageUrl, stats, downloadedImages, config, analysisResult?)`；`saveImage` 内部若收到 `analysisResult`，将跳过重复的 `identifyImageFormat` 与可能的尺寸解析，仅在缺失字段时兜底。
   - 分析失败的重试边界：细分“可重试/不可重试”并复用既有下载重试框架：
     - 可重试：`processing_timeout`、`memory_error`、`content_too_small`（疑似截断）→ 作为“下载失败”加入 `stats.failedUrls`，进入下一轮重试。
-    - 不可重试：`unsupported_content_type`、`unknown_format`、`invalid_dimensions`、多数 `metadata_error` → 仅计入 `analysisFailures` 与 `analysisFailedUrls`，不加入重试队列。
+    - 不可重试：`unsupported_content_type`、`unknown_format`、`invalid_dimensions` → 仅计入 `analysisFailures` 与 `analysisFailedUrls`，不加入重试队列。
 
 3) 日志与用户可见体验
 - 在 `lib/downloadQueue.js` 的 `processDownloadQueue` 内：
@@ -152,7 +152,7 @@
 根据前面的设计方案，新的 `analyzeImage` 功能将插入到现有的下载流程中。以下明确各模块的职责边界：
 
 ### 保持不变的模块
-- `lib/imageDownloader.js`：继续负责获取图片数据，返回 `imageData` 对象
+- `lib/imageFetcher.js`：负责获取图片数据（fetch），返回 `imageData` 对象
 - `lib/fileManager.js`：继续负责图片保存、格式转换、文件命名等
 - `lib/downloadQueue.js`：继续负责并发控制、重试逻辑、进度统计
 
@@ -173,13 +173,12 @@
   - 阶段头与阶段性统计使用 info 级，保证用户可见性与简洁性
 
 - 失败统计
-  - 分析失败时除 `stats.failed++` 外，同时执行 `stats.analysisFailedUrls.push(url)` 便于后续追溯（分析失败不进入下载重试）
+  - 分析失败时除 `stats.failed++` 外，同时执行 `stats.analysisFailedUrls.push(url)` 便于后续追溯（仅“不可重试”原因不进入下载重试；可重试原因进入既有下载重试，见“重试边界与处理策略”）
 
 - 失败原因枚举
   - 在 `analyzeImage` 的返回中标准化 `reason` 字段，建议值：
     - `unsupported_content_type`（不在白名单，且非 attachment 且非缺失）
     - `unknown_format`（buffer 嗅探无法识别为图片）
-    - `metadata_error`（获取元数据异常或关键字段缺失）
     - （可选）`invalid_dimensions`（尺寸异常，如 0x0 或明显非法）
 
 - 性能注意
@@ -190,7 +189,6 @@
 - 新增并标准化 `reason` 枚举：
   - `unsupported_content_type`（不在白名单，且非 attachment 且非缺失）
   - `unknown_format`（buffer 嗅探无法识别为图片）
-  - `metadata_error`（获取元数据异常或关键字段缺失）
   - `invalid_dimensions`（尺寸异常，如 0x0 或明显非法）
   - `content_too_small`（buffer 太小，如 < minBufferSize）
   - `processing_timeout`（分析超时，超过 timeoutMs）
@@ -200,16 +198,15 @@
   1) content-type 白名单快速判定
   2) minBufferSize（过小直接判定为 `content_too_small`）
   3) 格式嗅探（`unknown_format`）
-  4) metadata/尺寸（`metadata_error` / `invalid_dimensions`）
+  4) 尺寸（`invalid_dimensions`）
   5) 超时/内存错误兜底（`processing_timeout` / `memory_error`）
 
 ##### 重试边界与处理策略（新增）
 
 - 分析失败的可重试性：
   - 可重试：`processing_timeout`、`memory_error`、`content_too_small`
-  - 不可重试：`unsupported_content_type`、`unknown_format`、`invalid_dimensions`、`metadata_error`（默认）
+  - 不可重试：`unsupported_content_type`、`unknown_format`、`invalid_dimensions`
 - 实现策略：在队列中，若为可重试原因，则按“下载失败”处理（推入 `stats.failedUrls`，进入既有重试回路）；否则仅计入 `analysisFailures`，不影响下载重试。
-- 注：如需放宽 `metadata_error` 的重试（例如仅在 buffer 极小 < 8KB 时视为可重试），可通过配置开关在后续迭代引入（保持 P0 KISS，默认禁用）。
 
 #### 配置项预留
 
@@ -247,7 +244,6 @@ stats: {
   analysisFailures: {
     unsupported_content_type: 0,
     unknown_format: 0,
-    metadata_error: 0,
     content_too_small: 0,
     processing_timeout: 0,
     memory_error: 0,
@@ -298,7 +294,7 @@ stats: {
   - 在队列开始时输出统一阶段头日志，优化进度显示
   - 可重试分析失败（`processing_timeout`/`memory_error`/`content_too_small`）将 URL 归入 `failedUrls` 以复用既有重试回路；其余原因仅计入 `analysisFailures`
 
-- （可选）修改：`lib/downloader/axiosDownloader.js`
+- （可选）修改：`lib/fetcher/axiosFetcher.js`
   - 支持 `acceptBinaryContentTypes` 配置，放宽对 `content-type` 的判定（允许缺失 `content-type`），便于下载部分站点返回的二进制流（与分析阶段的白名单保持一致）。
 
 - 修改：`lib/fileManager.js`
@@ -326,7 +322,7 @@ stats: {
 ## 测试策略
 
 - 单元测试（`lib/imageAnalyzer.js`）：
-  - 覆盖所有失败 `reason` 场景：`unsupported_content_type`、`unknown_format`、`metadata_error`、`invalid_dimensions`、`content_too_small`、`processing_timeout`、`memory_error`。
+  - 覆盖所有失败 `reason` 场景：`unsupported_content_type`、`unknown_format`、`invalid_dimensions`、`content_too_small`、`processing_timeout`、`memory_error`。
   - 覆盖 SVG 场景（含正常与无法解析尺寸的回退路径）。
   - 覆盖超大文件阈值策略（超过 `maxAnalyzableSizeInMB` 时跳过元数据解析）。
 
@@ -341,7 +337,7 @@ stats: {
 #### 边界样本准备（建议）
 
 - 头部正常/内容截断：服务端返回 200 且 `Content-Type: image/*`，但仅返回部分内容（可模拟中途断流或直接截断 buffer），用于验证 `content_too_small` 与可重试路径
-- 非图片内容混入：在图像数据尾部追加随机字节，触发解析失败（验证 `unknown_format`/`metadata_error` 分类）
+- 非图片内容混入：在图像数据尾部追加随机字节，触发解析失败（验证 `unknown_format` 分类）
 - 超大文件：≥100MB 大图，验证“跳过尺寸解析”的策略与内存保护是否生效
 
 # 第四部分：进阶功能
@@ -367,8 +363,9 @@ stats: {
 - 配置（新增 `config.analysis` 字段扩展）：
   - `mode: 'inline' | 'twoPhase'`（默认 `inline`）
   - `tempDir: string`（默认 `./.tmp_analysis`，用于临时持久化 buffer）
+  - `cleanupTempOnStart: boolean`（默认 `true`，任务启动前清理临时目录陈旧文件）
   - `cleanupTempOnComplete: boolean`（默认 `true`，下载阶段完成后清理临时文件）
-  - `maxHoldBuffers: number`（默认 `0`，表示分析阶段不在内存中保留 buffer，写入临时文件后立即释放）
+  - `maxHoldBuffers: number`（默认 `0`，表示分析阶段不在内存中保留 buffer；当 >0 时批量收集到阈值再统一落盘，以降低 I/O 调用次数）
   - `concurrentDownloads` 仍复用现有顶层配置，不新增并发维度。
 
 - 统计与清理：
@@ -408,7 +405,7 @@ stats: {
 - `saveImage` 能复用 `analysisResult`，避免重复格式嗅探；写盘与最终类型统计无回归；本地/网络模式均通过回归。
 
 #### P1 建议（下一迭代增强）
-- `axiosDownloader`：可选配置 `acceptBinaryContentTypes`（布尔或字符串数组），与白名单一致，并接受缺失 `content-type`；最终裁决仍由分析阶段完成。
+- `axiosFetcher`：可选配置 `acceptBinaryContentTypes`（布尔或字符串数组），与白名单一致，并接受缺失 `content-type`；最终裁决仍由分析阶段完成。
 - 性能可观测：记录单张分析耗时并对超时样本打标；必要时输出采样日志。
 - 汇总输出增强：在队列尾部输出分析失败原因细分汇总（承接 `analysisFailures` 结构）。
 - 可调控：将抽样比例、日志级别在 `analysis` 配置中参数化。
@@ -438,36 +435,36 @@ stats: {
 
 #### P0 必须（当前迭代）
 - [ ] 创建 feature 分支：`feat/analyze-stage`
-- [ ] 新增 `lib/imageAnalyzer.js`
-  - [ ] 实现 `analyzeImage(imageData, url)`（P0 精简版）：内容类型白名单、`minBufferSize`、格式嗅探、`timeout`/`memory_error` 分类
-  - [ ] 超大文件策略：超过 `analysis.maxAnalyzableSizeInMB` 跳过尺寸解析，并在 `metadata.skipped='too_large'` 标记
-  - [ ] SVG：无法解析尺寸时设为 `unknown`，不视为失败
-- [ ] 修改 `lib/downloadQueue.js`
-  - [ ] 在 `fetchImage` 与 `saveImage` 之间插入 `analyzeImage`
-  - [ ] 扩展 `stats`：`analyzed`、`analysisFailures{...}`、`analysisFailedUrls`
-  - [ ] 日志：阶段头 `Analyzing images ...` / `Downloading images ...`；抽样/级别按配置
-  - [ ] 分析失败：按“可重试/不可重试”边界处理（可重试加入 `failedUrls`）
-- [ ] 配置与校验
-  - [ ] `config/config.js` 预留 `analysis` 字段（含 `preset`）
-  - [ ] `lib/configValidator.js` 填充默认值并做边界校验；实现 `preset` 到具体阈值的映射
-- [ ] 测试
-  - [ ] `imageAnalyzer` 单测：失败原因覆盖、SVG 尺寸 `unknown`、超大文件 `skipped` 标记
-  - [ ] 边界样本：100MB+ 大图、损坏图片（头部正常/内容截断）、网络中断导致的部分下载（模拟）
-  - [ ] `downloadQueue` 集成测试：可重试与不可重试路径、`analysisResult` 传递给 `saveImage`
-  - [ ] E2E：本地 HTML/网络模式回归（并发/重试/断点续传不回归）
-- [ ] 清理多余日志与降噪
+- [x] 新增 `lib/imageAnalyzer.js`
+  - [x] 实现 `analyzeImage(imageData, url)`（P0 精简版）：内容类型白名单、`minBufferSize`、格式嗅探、`timeout`/`memory_error` 分类
+  - [x] 超大文件策略：超过 `analysis.maxAnalyzableSizeInMB` 跳过尺寸解析，并在 `metadata.skipped='too_large'` 标记
+  - [x] SVG：无法解析尺寸时设为 `unknown`，不视为失败
+- [x] 修改 `lib/downloadQueue.js`
+  - [x] 在 `fetchImage` 与 `saveImage` 之间插入 `analyzeImage`
+  - [x] 扩展 `stats`：`analyzed`、`analysisFailures{...}`、`analysisFailedUrls`
+  - [x] 日志：阶段头 `Analyzing images ...` / `Downloading images ...`；抽样/级别按配置
+  - [x] 分析失败：按“可重试/不可重试”边界处理（可重试加入 `failedUrls`）
+- [x] 配置与校验
+  - [x] `config/config.js` 预留 `analysis` 字段（含 `preset`）
+  - [x] `lib/configValidator.js` 填充默认值并做边界校验；实现 `preset` 到具体阈值的映射
+- [x] 测试
+  - [x] `imageAnalyzer` 单测：失败原因覆盖、SVG 尺寸 `unknown`、超大文件 `skipped` 标记
+  - [x] 边界样本：100MB+ 大图、损坏图片（头部正常/内容截断）、网络中断导致的部分下载（模拟）
+  - [x] `downloadQueue` 集成测试：可重试与不可重试路径、`analysisResult` 传递给 `saveImage`
+  - [x] E2E：本地 HTML/网络模式回归（并发/重试/断点续传不回归）
+- [x] 清理多余日志与降噪
 
 #### P1 建议（下一迭代）
-- [ ] `axiosDownloader` 支持 `acceptBinaryContentTypes`
-- [ ] 记录分析耗时并标记超时样本（可观测性）
-- [ ] 队列尾部输出分析失败原因细分汇总（承接 `analysisFailures`）
-- [ ] 参数化抽样比例与日志级别（如 `enableDetailLog`）
+ - [x] `axiosFetcher` 支持 `acceptBinaryContentTypes`
+ - [x] 记录分析耗时并标记超时样本（可观测性）
+ - [x] 队列尾部输出分析失败原因细分汇总（承接 `analysisFailures`）
+ - [x] 参数化抽样比例与日志级别（如 `enableDetailLog`）
 
 #### P2 可选（twoPhase 模式）
-- [ ] `analysis.mode='twoPhase'` 编排实现（遵守并发上限）
-- [ ] 新增 `lib/tempFileStore.js` 或在 `fileManager` 内补充临时文件能力
-- [ ] 扩展配置：`analysis.tempDir`、`cleanupTempOnComplete`、`maxHoldBuffers`
-- [ ] 冷启动清理临时文件策略（mtime/标记）
+- [x] `analysis.mode='twoPhase'` 编排实现（遵守并发上限）
+- [x] 新增 `lib/tempFileStore.js` 或在 `fileManager` 内补充临时文件能力
+- [x] 扩展配置：`analysis.tempDir`、`cleanupTempOnStart`、`cleanupTempOnComplete`、`maxHoldBuffers`
+- [x] 冷启动清理临时文件策略（mtime/标记）
 - [ ] 与 `crawler-core` 接口对齐：`analyzeUrls()` / `downloadUrls()`
 
 ### 回滚与风险控制
