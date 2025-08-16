@@ -5,7 +5,9 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "author": "",
   "license": "ISC",
@@ -23,5 +25,8 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "sharp": "^0.33.3",
     "svg-parser": "^2.0.4"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
   }
 }
