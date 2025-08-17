@@ -3,14 +3,12 @@ import { logger } from './utils/logger.js'
 import { defaultLogConfig } from './config/logConfig.js'
 import { validateAndNormalizeConfig } from './lib/configValidator.js'
 import { launchBrowser } from './lib/browserLauncher.js'
-import { downloadManager } from './lib/downloadManager.js'
-import {
-  loadAndScrollPage,
-  extractImageUrls,
-  processUrlsByImageMode,
-  processLocalHtmlMode,
-} from './lib/htmlProcessor.js'
-import { scrapeUrl } from './lib/downloadManager.js'
+import { downloadManager } from './lib/publicApi.js'
+import { loadAndScrollPage } from './lib/pageLoader.js'
+import { extractImageUrls } from './lib/imageExtractor.js'
+import { processUrlsByImageMode } from './lib/imageModeProcessor.js'
+import { processLocalHtmlMode } from './lib/localHtmlProcessor.js'
+import { scrapeUrl } from './lib/publicApi.js'
 import { toLogMeta } from './utils/errors.js'
 
 /**

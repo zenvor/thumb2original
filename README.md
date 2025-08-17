@@ -252,33 +252,6 @@ const isBinaryByDefaultList = (
 
 > 说明：旧字段 `retryDelaySeconds` 已弃用，仍被兼容为毫秒转换；请迁移到 `retryDelayMs`。
 
-## 目录结构
-
-```
-thumb2original/
-├── config/                  # 配置文件
-│   └── config.js           # 主配置文件
-├── lib/                     # 核心功能模块
-│   ├── downloadManager.js  # 下载管理
-│   ├── htmlProcessor.js    # HTML处理
-│   └── imageFetcher.js    # 图片访问（fetch）
-├── utils/                   # 工具函数
-│   ├── logger.js           # 日志工具
-│   ├── imageUtils.js       # 图片处理工具
-│   ├── fileUtils.js        # 文件操作工具
-│   ├── fileNameSanitizer.js # 文件名处理
-│   └── imageUrlConverter.js # URL转换
-├── html/                    # 本地HTML文件目录
-│   └── 网站名称/
-│       ├── page1.html
-│       └── page2.html
-├── download/                # 下载的图片目录
-│   ├── 页面标题1/
-│   └── 页面标题2/
-├── index.js                # 主入口文件
-├── package.json
-└── README.md
-```
 
 ## 模块化架构
 

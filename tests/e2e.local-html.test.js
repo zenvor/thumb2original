@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import fs from 'fs/promises'
 import path from 'path'
 import { validateAndNormalizeConfig } from '../lib/configValidator.js'
-import { downloadManager } from '../lib/downloadManager.js'
+import { downloadManager } from '../lib/publicApi.js'
 
 const tmpRoot = path.join(process.cwd(), '.e2e_local_html')
 const htmlDir = path.join(tmpRoot, 'html')
