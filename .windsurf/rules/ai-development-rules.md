@@ -1,5 +1,5 @@
 ---
-trigger: model_decision
+trigger: always_on
 ---
 
 # AI 开发约束规则 - 避免逻辑复杂化
