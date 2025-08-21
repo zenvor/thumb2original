@@ -60,6 +60,43 @@ export class ExternalDependencyError extends BaseAppError {
 }
 
 /**
+ * 检查是否为关键错误，需要立即终止程序
+ * @param {Error} error - 错误对象
+ * @returns {boolean} 是否为关键错误
+ */
+export function isFatalError(error) {
+  if (!error) return false
+  
+  // 检查是否标记为关键错误
+  if (error.isCritical) return true
+  
+  // 检查是否为浏览器连接断开错误
+  const isBrowserError = 
+    error.message.includes('Connection closed') ||
+    error.message.includes('Navigating frame was detached') ||
+    error.message.includes('Session closed')
+  
+  return isBrowserError
+}
+
+/**
+ * 处理关键错误：记录日志并重新抛出
+ * @param {Error} error - 错误对象
+ * @param {string} contextInfo - 上下文信息（如文件名、URL等）
+ * @param {object} logger - 日志实例
+ * @throws {Error} 重新抛出关键错误以终止程序
+ */
+export function handleFatalError(error, contextInfo, logger) {
+  if (isFatalError(error)) {
+    logger.error(`检测到关键错误，立即终止程序: ${error.message}`, 'system', { 
+      context: contextInfo,
+      ...toLogMeta(error) 
+    })
+    throw error
+  }
+}
+
+/**
  * 将错误转换为适合结构化日志的元信息对象
  * @param {Error} error
  */
