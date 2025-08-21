@@ -87,8 +87,12 @@ export const siteConfigs = {
  *   includeInlineSvg?: boolean,
  *   includeFavicon?: boolean,
  *   includeCssBackgrounds?: boolean,
- *   includeDataUri?: boolean
+ *   includeDataUri?: boolean,
+ *   includeSrcset?: boolean
  * }} [imageDiscovery]
+ * @property {{
+ *   retryHtmlAsFailure?: boolean
+ * }} [htmlHandling]
  * @property {{
  *   enableConversion?: boolean,
  *   // 全局转换策略：将所有图片统一转换为指定格式；'none' 表示不转换
@@ -101,15 +105,21 @@ export const siteConfigs = {
 /** @type {ScraperConfig} */
 export const scraperConfig = {
   // --- 核心模式 ---
-  scrapeMode: 'single_page', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
-  imageMode: 'all', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
+  scrapeMode: 'local_html', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
+  imageMode: 'originals_only', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
 
   // --- 图片发现范围（可控开关） ---
   imageDiscovery: {
-    includeInlineSvg: true, // 是否包含内联 SVG（仅当能解析出外链或 data 引用时有效）
-    includeFavicon: true, // 是否包含网站 favicon（link rel="icon" 等）
-    includeCssBackgrounds: true, // 是否解析 CSS background-image/url(...) 与 --svg 变量
-    includeDataUri: true // 是否包含 data:image/* URI（可能带来噪声，默认关闭）
+    includeInlineSvg: false, // 是否包含内联 SVG（仅当能解析出外链或 data 引用时有效）
+    includeFavicon: false, // 是否包含网站 favicon（link rel="icon" 等）
+    includeCssBackgrounds: false, // 是否解析 CSS background-image/url(...) 与 --svg 变量
+    includeDataUri: false, // 是否包含 data:image/* URI（可能带来噪声，默认关闭）
+    includeSrcset: false // 是否解析 img 标签的 srcset 属性中的图片链接（默认开启）
+  },
+
+  // --- HTML 页面处理策略 ---
+  htmlHandling: {
+    retryHtmlAsFailure: true // 遇到 HTML 响应时直接标记为失败并重试，而非尝试解析页面内容（默认开启，更简洁稳定）
   },
 
   // --- 本地HTML爬虫模式配置 ---
@@ -121,7 +131,7 @@ export const scraperConfig = {
   memoryDirectory: './memory', // 记忆目录路径（每个HTML文件对应一个JSONL文件）
   forceReprocess: false, // 是否强制重新处理所有文件（忽略记忆）
   lazyMemoryCreation: true, // 是否启用懒加载模式，只在实际处理时创建JSONL文件
-  maxFilesPerRun: 200, // 每次运行最大处理文件数量（0表示无限制）
+  maxFilesPerRun: 300, // 每次运行最大处理文件数量（0表示无限制）
   confirmLargeRun: false, // 处理大量文件前是否需要用户确认（检测到超过100个HTML文件时会提示用户确认）
 
   // --- 反检测配置 ---
@@ -134,21 +144,23 @@ export const scraperConfig = {
   },
 
   // --- 目标 URL ---
-  targetUrl: 'https://nuxt.com/', // 目标网址 (单页模式)
+  targetUrl: 'https://www.duitang.com/blog/?id=1555182119', // 目标网址 (单页模式)
   targetUrls: [
     // 目标网址列表 (多页模式)
     'https://www.duitang.com/category/?cat=wallpaper',
-    'https://www.duitang.com/category/?cat=wallpaper#!hot-p2'
+    'https://www.duitang.com/category/?cat=wallpaper#!hot-p2',
+    'https://nuxt.com/'
   ],
 
   // --- 下载行为 ---
   outputDirectory: '/Volumes/PSSD/外部/picture/download', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
   // outputDirectory: '', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
-  maxRetries: 5, // 下载失败后的最大重试次数
+  // outputDirectory: '', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
+  maxRetries: 1, // 下载失败后的最大重试次数
   retryDelayMs: 5000, // 每次重试的间隔时间 (毫秒)
 
   // --- 性能与反爬虫 ---
-  concurrentDownloads: 10, // 并发下载数 (降低并发以避免 503 错误)
+  concurrentDownloads: 5, // 并发下载数 (降低并发以避免 503 错误)
   minRequestDelayMs: 2000, // 两批次下载之间的最小延迟 (毫秒) - 增加延迟
   maxRequestDelayMs: 4000, // 两批次下载之间的最大延迟 (毫秒) - 增加延迟
 
@@ -198,6 +210,10 @@ export const scraperConfig = {
     // P1：axios 放宽二进制类型接受；true 为允许常见二进制与缺失 content-type
     acceptBinaryContentTypes: true,
     // P2：twoPhase 模式配置（默认 inline）
+    // 支持: 'inline' | 'twoPhase' | 'twoPhaseApi'
+    // - inline: 分析与下载同步进行（现有默认逻辑）
+    // - twoPhase: 先分析写入临时文件，再统一读取临时文件进行下载
+    // - twoPhaseApi: 仅执行分析并写入临时文件，跳过下载（供 API 使用）
     mode: 'inline',
     tempDir: './.tmp_analysis',
     cleanupTempOnComplete: true,

@@ -66,9 +66,9 @@ describe('E2E - 分析失败可重试（content_too_small）', () => {
     expect(res.analysisFailures.content_too_small).toBe(1)
     expect(callCount.get('http://retry-small')).toBeGreaterThanOrEqual(2)
 
-    // 阶段日志至少包含一次“Analyzing images ...”
+    // 阶段日志至少包含一次“Fetch images ...”（内联模式批次头）
     expect(headerSpy).toHaveBeenCalled()
-    const calledWithAnalyzing = headerSpy.mock.calls.some(c => String(c[0]).includes('Analyzing images'))
-    expect(calledWithAnalyzing).toBe(true)
+    const calledWithFetch = headerSpy.mock.calls.some(c => String(c[0]).includes('Fetch images'))
+    expect(calledWithFetch).toBe(true)
   })
 })
