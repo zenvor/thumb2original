@@ -66,15 +66,17 @@ export class ExternalDependencyError extends BaseAppError {
  */
 export function isFatalError(error) {
   if (!error) return false
+
+  const message = typeof error?.message === 'string' ? error.message : ''
   
   // 检查是否标记为关键错误
   if (error.isCritical) return true
   
   // 检查是否为浏览器连接断开错误
   const isBrowserError = 
-    error.message.includes('Connection closed') ||
-    error.message.includes('Navigating frame was detached') ||
-    error.message.includes('Session closed')
+    message.includes('Connection closed') ||
+    message.includes('Navigating frame was detached') ||
+    message.includes('Session closed')
   
   return isBrowserError
 }
@@ -112,5 +114,4 @@ export function toLogMeta(error) {
     context: error.context
   }
 }
-
 
