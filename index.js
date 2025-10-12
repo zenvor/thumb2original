@@ -46,7 +46,21 @@ async function runLocalHtmlMode(browser, config) {
 }
 
 async function runNetworkMode(browser, config) {
-  const urlsToScrape = config.scrapeMode === 'single_page' ? [config.targetUrl] : config.targetUrls
+  let urlsToScrape = []
+  if (config.scrapeMode === 'single_page') {
+    if (config.targetUrl) {
+      urlsToScrape = [config.targetUrl]
+    } else {
+      logger.warn('single_page 模式未提供 targetUrl，将跳过网络抓取。', 'system')
+    }
+  } else {
+    if (Array.isArray(config.targetUrls)) {
+      urlsToScrape = config.targetUrls.filter(Boolean)
+    } else if (config.scrapeMode === 'multiple_pages') {
+      logger.warn('multiple_pages 模式未提供有效的 targetUrls，将跳过网络抓取。', 'system')
+    }
+  }
+
   const twoPhaseApiOutputs = []
   for (const url of urlsToScrape) {
     if (!url) continue
