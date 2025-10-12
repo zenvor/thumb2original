@@ -94,6 +94,9 @@ export const siteConfigs = {
  *   retryHtmlAsFailure?: boolean
  * }} [htmlHandling]
  * @property {{
+ *   logImageUrls?: boolean
+ * }} [debug]
+ * @property {{
  *   enableConversion?: boolean,
  *   // 全局转换策略：将所有图片统一转换为指定格式；'none' 表示不转换
  *   // 支持的目标格式：'jpeg' | 'png' | 'webp' | 'tiff' | 'none'
@@ -122,6 +125,11 @@ export const scraperConfig = {
     retryHtmlAsFailure: true // 遇到 HTML 响应时直接标记为失败并重试，而非尝试解析页面内容（默认开启，更简洁稳定）
   },
 
+  // --- 调试选项 ---
+  debug: {
+    logImageUrls: false // 是否打印所有原始图片链接（调试用）
+  },
+
   // --- 本地HTML爬虫模式配置 ---
   htmlDirectory: './html', // 本地HTML文件目录路径
   htmlSortOrder: 'name', // HTML文件排序方式: 'name' (按文件名，默认) | 'mtime_asc' (按修改时间从旧到新) | 'mtime_desc' (按修改时间从新到旧)
@@ -131,7 +139,7 @@ export const scraperConfig = {
   memoryDirectory: './memory', // 记忆目录路径（每个HTML文件对应一个JSONL文件）
   forceReprocess: false, // 是否强制重新处理所有文件（忽略记忆）
   lazyMemoryCreation: true, // 是否启用懒加载模式，只在实际处理时创建JSONL文件
-  maxFilesPerRun: 300, // 每次运行最大处理文件数量（0表示无限制）
+  maxFilesPerRun: 390, // 每次运行最大处理文件数量（0表示无限制）
   confirmLargeRun: false, // 处理大量文件前是否需要用户确认（检测到超过100个HTML文件时会提示用户确认）
 
   // --- 反检测配置 ---
@@ -144,23 +152,22 @@ export const scraperConfig = {
   },
 
   // --- 目标 URL ---
-  targetUrl: 'https://www.duitang.com/blog/?id=1555182119', // 目标网址 (单页模式)
+  targetUrl: 'https://nuxt.com/', // 目标网址 (单页模式)
   targetUrls: [
     // 目标网址列表 (多页模式)
     'https://www.duitang.com/category/?cat=wallpaper',
-    'https://www.duitang.com/category/?cat=wallpaper#!hot-p2',
-    'https://nuxt.com/'
+    // 'https://www.duitang.com/category/?cat=wallpaper#!hot-p2',
+    // 'https://nuxt.com/'
   ],
 
   // --- 下载行为 ---
-  outputDirectory: '/Volumes/PSSD/外部/picture/download', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
-  // outputDirectory: '', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
-  // outputDirectory: '', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
+  // outputDirectory: '/Volumes/PSSD/外部/picture/download', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
+  outputDirectory: '', // 图片输出目录 (留空则默认在 ./download 下，并以网页标题命名)
   maxRetries: 1, // 下载失败后的最大重试次数
   retryDelayMs: 5000, // 每次重试的间隔时间 (毫秒)
 
   // --- 性能与反爬虫 ---
-  concurrentDownloads: 5, // 并发下载数 (降低并发以避免 503 错误)
+  concurrentDownloads: 10, // 并发下载数 (降低并发以避免 503 错误)
   minRequestDelayMs: 2000, // 两批次下载之间的最小延迟 (毫秒) - 增加延迟
   maxRequestDelayMs: 4000, // 两批次下载之间的最大延迟 (毫秒) - 增加延迟
 
@@ -181,7 +188,9 @@ export const scraperConfig = {
     // 全局转换策略：'jpeg' | 'png' | 'webp' | 'tiff' | 'none'
     // 说明：SVG/AVIF 会被识别用于统计，但不做格式转换（仅识别不转换）。
     // 默认统一转换为 PNG（与历史默认“WebP→PNG”对齐，同时提供全局统一策略）
-    convertTo: 'none'
+    convertTo: 'none',
+    // 防止文件名冲突：当同名文件存在时，在文件名后添加URL路径的哈希后缀
+    preventNameCollision: false
   },
 
   // --- 图片分析（P0 预留并启用） ---
