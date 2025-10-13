@@ -23,6 +23,7 @@ vi.mock('../utils/imageUrlConverter.js', () => ({
 import { logger } from '../utils/logger.js'
 import { processUrlsByImageMode } from '../lib/imageModeProcessor.js'
 import { scraperConfig } from '../config/config.js'
+import { convertThumbnailToOriginalUrl } from '../utils/imageUrlConverter.js'
 
 describe('imageModeProcessor 日志配置', () => {
   beforeEach(() => {
@@ -30,6 +31,7 @@ describe('imageModeProcessor 日志配置', () => {
     logger.debug.mockClear()
     logger.warn.mockClear()
     scraperConfig.debug = {}
+    convertThumbnailToOriginalUrl.mockImplementation((url) => `converted-${url}`)
   })
 
   it('运行时配置开启 logImageUrls 时打印原图列表', async () => {
@@ -92,5 +94,22 @@ describe('imageModeProcessor 日志配置', () => {
       'https://chinesesexphotos.com/albums/sample01.jpg',
       'https://cdn.chinesesexphotos.com/assets/sample02.jpg'
     ])
+  })
+
+  it('originals_only 未找到原图时返回空数组并记录警告', async () => {
+    convertThumbnailToOriginalUrl
+      .mockImplementationOnce(() => '')
+      .mockImplementationOnce(() => '')
+    logger.warn.mockClear()
+
+    const urls = await processUrlsByImageMode(
+      null,
+      ['thumb-empty-1', 'thumb-empty-2'],
+      'https://example.com/gallery',
+      'originals_only'
+    )
+
+    expect(urls).toEqual([])
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('未找到任何原始图片'))
   })
 })

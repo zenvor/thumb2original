@@ -16,6 +16,7 @@ class HtmlMemoryManager {
     this.fileMemoryMap = new Map() // HTML文件路径 -> JSONL文件路径的映射
     this._memoryDirSnapshot = null // 记忆目录快照，用于回退匹配
     this.htmlRoot = null // HTML 根目录（用于相对 key 归一化）
+    this._indexMap = new Map()
   }
 
   /**
@@ -299,6 +300,9 @@ class HtmlMemoryManager {
    */
   async _loadIndex() {
     try {
+      if (!this._indexMap) {
+        this._indexMap = new Map()
+      }
       const indexPath = this._getIndexFilePath()
       const exists = await this._checkFileExists(indexPath)
       if (!exists) return
