@@ -8,7 +8,7 @@ import bodyParser from 'koa-bodyparser'
 import { logger } from '../utils/logger.js'
 import { MemoryStorage } from './storage/MemoryStorage.js'
 import { ImageCache } from './storage/ImageCache.js'
-import { SSEManager } from './sse/SSEManager.js'
+import { WebSocketManager } from './websocket/WebSocketManager.js'
 import { ExtractionService } from './services/ExtractionService.js'
 import { DownloadService } from './services/DownloadService.js'
 import { createExtractionsRouter } from './routes/extractions.js'
@@ -20,8 +20,8 @@ export function createApp() {
   // 创建服务实例
   const storage = new MemoryStorage()
   const imageCache = new ImageCache()
-  const sseManager = new SSEManager()
-  const extractionService = new ExtractionService(storage, sseManager, imageCache)
+  const wsManager = new WebSocketManager()
+  const extractionService = new ExtractionService(storage, wsManager, imageCache)
   const downloadService = new DownloadService(storage, imageCache)
 
   // 错误处理中间件
@@ -58,7 +58,7 @@ export function createApp() {
   }))
 
   // 路由
-  const extractionsRouter = createExtractionsRouter(extractionService, storage, sseManager)
+  const extractionsRouter = createExtractionsRouter(extractionService, storage)
   const downloadsRouter = createDownloadsRouter(downloadService)
 
   app.use(extractionsRouter.routes())
@@ -71,13 +71,15 @@ export function createApp() {
     if (ctx.path === '/health') {
       const stats = await storage.getStats()
       const cacheStats = imageCache.getStats()
+      const wsStats = wsManager.getStats()
 
       ctx.body = {
         status: 'ok',
         uptime: process.uptime(),
         memory: process.memoryUsage(),
         tasks: stats,
-        cache: cacheStats
+        cache: cacheStats,
+        websocket: wsStats
       }
     } else {
       ctx.status = 404
@@ -98,6 +100,10 @@ export function createApp() {
       logger.error('Cleanup error:', error)
     }
   }, 600000)
+
+  // 导出 wsManager 以便 server.js 可以设置 WebSocket 服务器
+  app.wsManager = wsManager
+  app.storage = storage
 
   return app
 }
