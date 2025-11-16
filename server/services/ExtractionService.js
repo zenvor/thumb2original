@@ -12,9 +12,10 @@ import { processDownloadQueue } from '../../lib/downloadQueue.js'
 import { toLogMeta } from '../../utils/errors.js'
 
 export class ExtractionService {
-  constructor(storage, sseManager) {
+  constructor(storage, sseManager, imageCache) {
     this.storage = storage
     this.sseManager = sseManager
+    this.imageCache = imageCache
   }
 
   /**
@@ -26,7 +27,7 @@ export class ExtractionService {
     const task = {
       id: taskId,
       url,
-      hash: this.generateHash(url),
+      hash: await this.generateHash(url),
       status: 'pending',
       message: null,
       status_changed_at: null,
@@ -115,31 +116,45 @@ export class ExtractionService {
         return
       }
 
-      // 分析图片（twoPhaseApi 模式）
-      this.sseManager.sendProgress(taskId, 'Analyzing images...', 80)
+      // 根据模式处理图片
+      const mode = task.options.mode || 'basic'
+      let images = []
 
-      const downloadedImages = []
-      const context = {
-        browser,
-        config: {
-          ...config,
-          analysis: {
-            ...config.analysis,
-            mode: 'twoPhaseApi' // 仅分析，不下载
-          }
-        },
-        pageTitle
+      if (mode === 'basic') {
+        // basic 模式：仅返回 URL
+        images = finalImageUrls.map(url => ({
+          id: this.generateId(),
+          url: url
+        }))
+
+        this.sseManager.sendProgress(taskId, 'Done', 100)
+      } else {
+        // advanced 模式：分析图片并缓存
+        this.sseManager.sendProgress(taskId, 'Analyzing images...', 80)
+
+        const downloadedImages = []
+        const context = {
+          browser,
+          config: {
+            ...config,
+            analysis: {
+              ...config.analysis,
+              mode: 'twoPhaseApi' // 仅分析，不下载到磁盘
+            }
+          },
+          pageTitle
+        }
+
+        const result = await processDownloadQueue(
+          finalImageUrls,
+          null, // twoPhaseApi 模式不需要目标目录
+          context,
+          downloadedImages
+        )
+
+        // 转换为 API 响应格式并缓存
+        images = this.formatImages(result.validEntries || [], taskId)
       }
-
-      const result = await processDownloadQueue(
-        finalImageUrls,
-        null, // twoPhaseApi 模式不需要目标目录
-        context,
-        downloadedImages
-      )
-
-      // 转换为 API 响应格式
-      const images = this.formatImages(result.validEntries || [])
 
       // 更新任务为完成
       await this.updateTaskStatus(taskId, 'done', {
@@ -175,18 +190,31 @@ export class ExtractionService {
   }
 
   /**
-   * 格式化图片数据为 API 响应格式
+   * 格式化图片数据为 API 响应格式（advanced 模式）
+   * 同时缓存图片 Buffer
    */
-  formatImages(validEntries) {
+  formatImages(validEntries, taskId) {
     return validEntries.map(entry => {
+      const imageId = this.generateId()
       const name = this.extractFileName(entry.url)
       const type = entry.analysisResult?.metadata?.format || 'unknown'
       const width = entry.analysisResult?.metadata?.width || 0
       const height = entry.analysisResult?.metadata?.height || 0
       const size = width * height
 
+      // 缓存图片 Buffer（如果有）
+      if (entry.analysisResult?.buffer) {
+        this.imageCache.set(taskId, imageId, entry.analysisResult.buffer, {
+          format: type,
+          width: width,
+          height: height,
+          name: name,
+          basename: name ? `${name}.${type}` : undefined
+        })
+      }
+
       return {
-        id: this.generateId(),
+        id: imageId,
         url: entry.url,
         name: name,
         basename: name ? `${name}.${type}` : undefined,
@@ -224,7 +252,10 @@ export class ExtractionService {
       maxRetries: 1,
       concurrentDownloads: 10,
       analysis: {
-        mode: 'twoPhaseApi'
+        mode: task.options.mode === 'advanced' ? 'twoPhaseApi' : 'disabled'
+      },
+      imageDiscovery: {
+        includeInlineImages: !task.options.ignoreInlineImages
       }
     }
 
@@ -254,7 +285,7 @@ export class ExtractionService {
   /**
    * 生成哈希
    */
-  generateHash(url) {
+  async generateHash(url) {
     const crypto = await import('crypto')
     return crypto.createHash('sha1').update(url).digest('hex')
   }
