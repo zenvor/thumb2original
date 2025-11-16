@@ -12,9 +12,9 @@ import { processDownloadQueue } from '../../lib/downloadQueue.js'
 import { toLogMeta } from '../../utils/errors.js'
 
 export class ExtractionService {
-  constructor(storage, sseManager, imageCache) {
+  constructor(storage, wsManager, imageCache) {
     this.storage = storage
-    this.sseManager = sseManager
+    this.wsManager = wsManager
     this.imageCache = imageCache
   }
 
@@ -62,7 +62,7 @@ export class ExtractionService {
     try {
       // 更新状态为 running
       await this.updateTaskStatus(taskId, 'running')
-      this.sseManager.sendProgress(taskId, 'Starting browser...', 5)
+      this.wsManager.sendProgress(taskId, 'Starting browser...', 5)
 
       // 获取任务
       const task = await this.storage.get(taskId)
@@ -76,7 +76,7 @@ export class ExtractionService {
       browser = launched.browser
       stopMonitoring = launched.stopMonitoring
 
-      this.sseManager.sendProgress(taskId, 'Browser started', 10)
+      this.wsManager.sendProgress(taskId, 'Browser started', 10)
 
       // 创建页面
       const page = await browser.newPage()
@@ -84,15 +84,15 @@ export class ExtractionService {
       page.setDefaultTimeout(config.stability?.pageTimeout || 60000)
 
       // 加载页面
-      this.sseManager.sendProgress(taskId, 'Loading page...', 20)
+      this.wsManager.sendProgress(taskId, 'Loading page...', 20)
       const pageTitle = await loadAndScrollPage(page, task.url, config)
 
       // 滚动页面
-      this.sseManager.sendProgress(taskId, 'Scrolling down...', 40)
+      this.wsManager.sendProgress(taskId, 'Scrolling down...', 40)
       // loadAndScrollPage 已包含滚动
 
       // 查找图片
-      this.sseManager.sendProgress(taskId, 'Finding images...', 60)
+      this.wsManager.sendProgress(taskId, 'Finding images...', 60)
       const imageUrls = await extractImageUrls(page, task.url, config.imageDiscovery)
 
       // 处理图片模式
@@ -112,7 +112,7 @@ export class ExtractionService {
           images_count: 0,
           message: 'No images found'
         })
-        this.sseManager.sendComplete(taskId, { images_count: 0 })
+        this.wsManager.sendComplete(taskId, { images_count: 0 })
         return
       }
 
@@ -127,10 +127,10 @@ export class ExtractionService {
           url: url
         }))
 
-        this.sseManager.sendProgress(taskId, 'Done', 100)
+        this.wsManager.sendProgress(taskId, 'Done', 100)
       } else {
         // advanced 模式：分析图片并缓存
-        this.sseManager.sendProgress(taskId, 'Analyzing images...', 80)
+        this.wsManager.sendProgress(taskId, 'Analyzing images...', 80)
 
         const downloadedImages = []
         const context = {
@@ -163,8 +163,8 @@ export class ExtractionService {
         message: null
       })
 
-      this.sseManager.sendProgress(taskId, 'Done', 100)
-      this.sseManager.sendComplete(taskId, {
+      this.wsManager.sendProgress(taskId, 'Done', 100)
+      this.wsManager.sendComplete(taskId, {
         images_count: images.length,
         status: 'done'
       })
@@ -176,7 +176,7 @@ export class ExtractionService {
         message: error.message
       })
 
-      this.sseManager.sendError(taskId, error)
+      this.wsManager.sendError(taskId, error)
 
     } finally {
       // 清理资源

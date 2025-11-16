@@ -122,50 +122,60 @@ Query the status and results of an extraction task.
 }
 ```
 
-### 3. Real-time Progress (SSE)
+### 3. Real-time Progress (WebSocket)
 
-**Endpoint:** `GET /api/extractions/:id/stream`
+**Endpoint:** `ws://localhost:8080/?taskId=<TASK_ID>`
 
-Subscribe to real-time progress updates via Server-Sent Events.
+Subscribe to real-time progress updates via WebSocket.
 
-**Response:** `200 OK` (text/event-stream)
+**Connection:** Connect to WebSocket server on port 8080 with taskId as query parameter.
 
-**Event Types:**
+**Message Types:**
 
 ```javascript
 // Connection established
-data: {"type":"connected","message":"SSE connection established"}
+{"type":"connected","message":"WebSocket connection established","taskId":"..."}
 
 // Progress updates
-data: {"type":"progress","message":"Loading page...","progress":20}
-data: {"type":"progress","message":"Scrolling down...","progress":40}
-data: {"type":"progress","message":"Finding images...","progress":60}
-data: {"type":"progress","message":"Analyzing images...","progress":80}
+{"type":"progress","message":"Loading page...","progress":20}
+{"type":"progress","message":"Scrolling down...","progress":40}
+{"type":"progress","message":"Finding images...","progress":60}
+{"type":"progress","message":"Analyzing images...","progress":80}
 
 // Task complete
-data: {"type":"complete","images_count":21,"status":"done"}
+{"type":"complete","images_count":21,"status":"done"}
 
 // Task failed
-data: {"type":"error","message":"Error message"}
+{"type":"error","message":"Error message"}
 ```
 
 **Example (JavaScript):**
 
 ```javascript
-const eventSource = new EventSource(`http://localhost:3000/api/extractions/${taskId}/stream`)
+const ws = new WebSocket(`ws://localhost:8080/?taskId=${taskId}`)
 
-eventSource.onmessage = (event) => {
+ws.onmessage = (event) => {
   const data = JSON.parse(event.data)
 
-  if (data.type === 'progress') {
+  if (data.type === 'connected') {
+    console.log('WebSocket connected:', data.message)
+  } else if (data.type === 'progress') {
     console.log(`Progress: ${data.progress}% - ${data.message}`)
   } else if (data.type === 'complete') {
     console.log('Task completed!', data)
-    eventSource.close()
+    ws.close()
   } else if (data.type === 'error') {
     console.error('Task failed:', data.message)
-    eventSource.close()
+    ws.close()
   }
+}
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error)
+}
+
+ws.onclose = () => {
+  console.log('WebSocket connection closed')
 }
 ```
 
@@ -371,23 +381,30 @@ const response = await fetch('http://localhost:3000/api/extractions', {
 const task = await response.json()
 console.log('Task created:', task.id)
 
-// Subscribe to real-time progress
-const eventSource = new EventSource(
-  `http://localhost:3000/api/extractions/${task.id}/stream`
-)
+// Subscribe to real-time progress via WebSocket
+const ws = new WebSocket(`ws://localhost:8080/?taskId=${task.id}`)
 
-eventSource.onmessage = (event) => {
+ws.onmessage = (event) => {
   const data = JSON.parse(event.data)
 
-  if (data.type === 'progress') {
+  if (data.type === 'connected') {
+    console.log('Connected to WebSocket')
+  } else if (data.type === 'progress') {
     updateProgressBar(data.progress, data.message)
   } else if (data.type === 'complete') {
     console.log(`Found ${data.images_count} images!`)
-    eventSource.close()
+    ws.close()
 
     // Fetch results
     fetchResults(task.id)
+  } else if (data.type === 'error') {
+    console.error('Task failed:', data.message)
+    ws.close()
   }
+}
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error)
 }
 
 async function fetchResults(taskId) {
@@ -425,7 +442,7 @@ TASK_ID=$(curl -X POST http://localhost:3000/api/extractions \
   -d '{"url":"https://example.com","mode":"advanced"}' \
   | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
 
-# 2. Wait for completion (or use SSE)
+# 2. Wait for completion (or use WebSocket)
 sleep 10
 
 # 3. Get results
@@ -450,7 +467,8 @@ curl -X POST http://localhost:3000/api/downloads/multiple \
 ### Environment Variables
 
 ```bash
-PORT=3000              # API server port (default: 3000)
+PORT=3000              # HTTP API server port (default: 3000)
+WS_PORT=8080           # WebSocket server port (default: 8080)
 HOST=0.0.0.0           # Bind address (default: 0.0.0.0)
 NODE_ENV=production    # Environment mode
 ```
@@ -478,7 +496,7 @@ pm2 start server.js --name thumb2original-api
        ├── POST /api/extractions (create task)
        │   └── Returns: task ID
        │
-       ├── GET /api/extractions/:id/stream (SSE)
+       ├── ws://localhost:8080/?taskId=xxx (WebSocket)
        │   └── Real-time progress updates
        │
        ├── GET /api/extractions/:id (query status)
@@ -489,7 +507,7 @@ pm2 start server.js --name thumb2original-api
 
 Server Architecture:
 ┌─────────────────────────────────────────┐
-│ Koa App                                 │
+│ HTTP Server (Port 3000)                 │
 │  ├── Routes (extractions, downloads)    │
 │  ├── Services                           │
 │  │   ├── ExtractionService (core)      │
@@ -497,7 +515,12 @@ Server Architecture:
 │  ├── Storage                            │
 │  │   ├── MemoryStorage (tasks)         │
 │  │   └── ImageCache (buffers)          │
-│  └── SSE Manager (progress)            │
+│  └── WebSocket Manager (progress)      │
+└─────────────────────────────────────────┘
+│
+├─────────────────────────────────────────┐
+│ WebSocket Server (Port 8080)            │
+│  └── Real-time progress broadcasting    │
 └─────────────────────────────────────────┘
 ```
 

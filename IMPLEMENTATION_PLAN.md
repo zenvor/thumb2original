@@ -13,12 +13,12 @@
 ### 1. API 功能
 - ✅ 创建提取任务
 - ✅ 查询任务状态和图片列表
-- ✅ SSE 实时进度推送
+- ✅ WebSocket 实时进度推送
 - ✅ 下载单张图片
 - ✅ 下载多张图片（ZIP）
 
 ### 2. 技术选型
-- **进度推送**：Server-Sent Events (SSE)
+- **进度推送**：WebSocket (ws 库，独立端口 8080)
 - **Web 框架**：Koa（按用户要求）
 - **存储方式**：内存存储（MemoryStorage + 图片 Buffer 缓存）
 - **爬虫模式**：复用现有逻辑，支持 basic 和 advanced 两种模式
@@ -49,8 +49,8 @@ thumb2original/
 │   ├── storage/
 │   │   ├── MemoryStorage.js          # 任务数据存储
 │   │   └── ImageCache.js             # 图片 Buffer 缓存
-│   └── sse/
-│       └── SSEManager.js             # SSE 管理器
+│   └── websocket/
+│       └── WebSocketManager.js       # WebSocket 管理器
 │
 ├── lib/                              # 核心爬虫逻辑（现有，复用）
 │   ├── browserLauncher.js
@@ -71,11 +71,11 @@ thumb2original/
 
 ### 端点列表
 
-| HTTP 方法 | 路径 | 功能描述 |
-|-----------|------|----------|
+| 协议/方法 | 路径/地址 | 功能描述 |
+|-----------|----------|----------|
 | POST | `/api/extractions` | 创建提取任务 |
 | GET | `/api/extractions/:id` | 查询任务状态和图片列表 |
-| GET | `/api/extractions/:id/stream` | SSE 实时进度推送 |
+| WebSocket | `ws://localhost:8080/?taskId=xxx` | 实时进度推送 |
 | POST | `/api/downloads/single` | 下载单张图片 |
 | POST | `/api/downloads/multiple` | 下载多张图片（ZIP） |
 | GET | `/health` | 健康检查 |
@@ -129,22 +129,22 @@ thumb2original/
 }
 ```
 
-#### SSE 事件格式
+#### WebSocket 消息格式
 ```javascript
 // 连接建立
-data: {"type":"connected","message":"SSE connection established"}
+{"type":"connected","message":"WebSocket connection established","taskId":"..."}
 
 // 进度更新
-data: {"type":"progress","message":"Loading page...","progress":20}
-data: {"type":"progress","message":"Scrolling down...","progress":40}
-data: {"type":"progress","message":"Finding images...","progress":60}
-data: {"type":"progress","message":"Analyzing images...","progress":80}
+{"type":"progress","message":"Loading page...","progress":20}
+{"type":"progress","message":"Scrolling down...","progress":40}
+{"type":"progress","message":"Finding images...","progress":60}
+{"type":"progress","message":"Analyzing images...","progress":80}
 
 // 完成
-data: {"type":"complete","images_count":21,"status":"done"}
+{"type":"complete","images_count":21,"status":"done"}
 
 // 错误
-data: {"type":"error","message":"Error message"}
+{"type":"error","message":"Error message"}
 ```
 
 #### 下载端点
@@ -220,20 +220,22 @@ Body: ZIP 压缩包二进制数据
 
 ## 🏗️ 核心模块设计
 
-### 1. SSEManager (server/sse/SSEManager.js)
-**职责**：管理 SSE 连接和事件推送
+### 1. WebSocketManager (server/websocket/WebSocketManager.js)
+**职责**：管理 WebSocket 连接和事件推送
 
 **核心方法**：
-- `addConnection(taskId, res)` - 添加 SSE 连接
-- `removeConnection(taskId, res)` - 移除连接
+- `addConnection(taskId, ws)` - 添加 WebSocket 连接
+- `removeConnection(taskId, ws)` - 移除连接
 - `sendProgress(taskId, message, progress)` - 发送进度
 - `sendComplete(taskId, data)` - 发送完成事件
 - `sendError(taskId, error)` - 发送错误事件
+- `broadcast(taskId, data)` - 广播消息给所有订阅者
 
 **特点**：
 - 支持一个任务多个订阅者
-- 自动清理过期连接
-- 统一的事件格式
+- 自动清理断开的连接
+- 统一的消息格式
+- 双向通信能力
 
 ### 2. MemoryStorage (server/storage/MemoryStorage.js)
 **职责**：存储提取任务数据
@@ -268,14 +270,14 @@ Body: ZIP 压缩包二进制数据
    d. 查找图片 (progress: 60%)
    e. 分析图片 (progress: 80%, twoPhaseApi 模式)
    f. 完成 (progress: 100%)
-3. 更新任务状态 → 推送 SSE 事件
+3. 更新任务状态 → 推送 WebSocket 消息
 ```
 
 **关键点**：
 - **basic 模式**：只提取 URL，不下载和分析
 - **advanced 模式**：下载并分析图片，缓存 Buffer
 - 复用现有的 `processDownloadQueue` 函数
-- 通过 SSEManager 发送实时进度
+- 通过 WebSocketManager 发送实时进度
 
 ### 4. ImageCache (server/storage/ImageCache.js)
 **职责**：临时缓存图片 Buffer（用于下载端点）
@@ -320,13 +322,17 @@ Body: ZIP 压缩包二进制数据
 ```javascript
 POST   /api/extractions           → 创建任务
 GET    /api/extractions/:id       → 查询任务
-GET    /api/extractions/:id/stream → SSE 流
 ```
 
 **下载路由 (downloads.js)**：
 ```javascript
 POST   /api/downloads/single      → 下载单张图片
 POST   /api/downloads/multiple    → 下载多张图片（ZIP）
+```
+
+**WebSocket 连接**（在 server.js 中处理）：
+```javascript
+ws://localhost:8080/?taskId=xxx   → 实时进度推送
 ```
 
 ### 7. Koa App (server/app.js)
@@ -366,24 +372,25 @@ POST   /api/downloads/multiple    → 下载多张图片（ZIP）
   │                        │                            │
 ```
 
-### SSE 实时进度推送流程
+### WebSocket 实时进度推送流程
 ```
-客户端                  API 服务器                SSEManager
+客户端                  WebSocket 服务器         WebSocketManager
   │                        │                        │
-  ├─ GET /stream/:id ──────→│                        │
+  ├─ WS Connect ───────────→│                        │
+  │   ?taskId=xxx          ├─ 验证任务               │
   │                        ├─ 添加连接 ─────────────→│
-  │←─ SSE: connected ──────┤                        │
+  │←─ WS: connected ───────┤                        │
   │                        │                        │
   │                     爬虫执行中...                │
   │                        │                        │
   │                        │←─ sendProgress() ──────┤
-  │←─ SSE: progress 20% ───┤                        │
+  │←─ WS: progress 20% ────┤                        │
   │                        │                        │
   │                        │←─ sendProgress() ──────┤
-  │←─ SSE: progress 40% ───┤                        │
+  │←─ WS: progress 40% ────┤                        │
   │                        │                        │
   │                        │←─ sendComplete() ──────┤
-  │←─ SSE: complete ────────┤                        │
+  │←─ WS: complete ─────────┤                        │
   │                        ├─ 关闭连接 ─────────────→│
   │                        │                        │
 ```
@@ -404,7 +411,7 @@ POST   /api/downloads/multiple    → 下载多张图片（ZIP）
 ## 📝 实现步骤
 
 ### 第一阶段：核心模块 ✅ 已完成
-- [x] SSEManager.js - SSE 连接管理
+- [x] WebSocketManager.js - WebSocket 连接管理
 - [x] MemoryStorage.js - 内存存储
 - [x] ExtractionService.js - 提取服务（已更新支持 basic/advanced 模式）
 
@@ -432,18 +439,18 @@ POST   /api/downloads/multiple    → 下载多张图片（ZIP）
 ## 🧪 测试计划
 
 ### 单元测试
-- [ ] SSEManager 连接管理测试
+- [ ] WebSocketManager 连接管理测试
 - [ ] MemoryStorage CRUD 测试
 - [ ] ExtractionService 任务创建和执行测试
 
 ### 集成测试
 - [ ] 完整提取流程测试
-- [ ] SSE 事件推送测试
+- [ ] WebSocket 消息推送测试
 - [ ] 并发任务测试
 
 ### 手动测试
 - [ ] 使用 cURL 测试 API
-- [ ] 使用浏览器测试 SSE
+- [ ] 使用 WebSocket 客户端测试实时进度
 - [ ] 测试各种网站的提取
 
 ---
@@ -467,11 +474,11 @@ POST   /api/downloads/multiple    → 下载多张图片（ZIP）
 - @koa/cors - CORS 支持
 - koa-bodyparser - 请求体解析
 - jszip - 生成 ZIP 压缩包
+- ws - WebSocket 服务器
 
 **移除依赖**：
 - express（改用 Koa）
 - cors（改用 @koa/cors）
-- socket.io（不需要 WebSocket）
 
 ---
 
@@ -501,7 +508,8 @@ docker run -d -p 3000:3000 thumb2original
 
 ### 环境变量
 ```bash
-PORT=3000              # API 服务器端口
+PORT=3000              # HTTP API 服务器端口
+WS_PORT=8080           # WebSocket 服务器端口
 HOST=0.0.0.0           # 绑定地址
 NODE_ENV=production    # 环境模式
 ```
@@ -517,8 +525,8 @@ NODE_ENV=production    # 环境模式
 
 ### 内存管理
 - 定期清理 1 小时前的已完成任务
-- 图片分析使用 twoPhaseApi 模式，不存储 Buffer
-- SSE 连接自动清理
+- 图片分析使用 twoPhaseApi 模式，不存储 Buffer到磁盘
+- WebSocket 连接自动清理
 
 ### 资源限制
 ```javascript
@@ -527,7 +535,7 @@ NODE_ENV=production    # 环境模式
   maxConcurrentTasks: 3,        // 最大并发任务数
   taskCleanupInterval: 600000,  // 清理间隔（10分钟）
   taskMaxAge: 3600000,          // 任务最大保留时间（1小时）
-  sseTimeout: 300000            // SSE 连接超时（5分钟）
+  wsTimeout: 300000             // WebSocket 连接超时（5分钟）
 }
 ```
 
@@ -541,7 +549,7 @@ NODE_ENV=production    # 环境模式
 | 下载图片 | ✅ 直接下载到本地 | ❌ 仅返回 URL | ✅ 临时缓存（用于下载端点） |
 | 元数据分析 | ✅ | ❌ | ✅ |
 | 输出结果 | 本地文件 | JSON（仅 URL） | JSON（完整元数据） |
-| 进度显示 | 控制台日志 | SSE 事件 | SSE 事件 |
+| 进度显示 | 控制台日志 | WebSocket 消息 | WebSocket 消息 |
 
 ### 2. basic vs advanced 模式
 **basic 模式**：
@@ -569,10 +577,10 @@ NODE_ENV=production    # 环境模式
 ## 📚 文档计划
 
 ### API 文档
-- [ ] API 端点说明
-- [ ] 请求/响应示例
-- [ ] 错误码说明
-- [ ] SSE 事件格式
+- [x] API 端点说明
+- [x] 请求/响应示例
+- [x] 错误码说明
+- [x] WebSocket 消息格式
 
 ### 使用指南
 - [ ] 快速开始
@@ -592,19 +600,20 @@ NODE_ENV=production    # 环境模式
 ### 功能完整性
 - ✅ 创建提取任务并返回任务 ID
 - ✅ 异步执行爬取和分析
-- ✅ SSE 实时推送进度（5个阶段）
+- ✅ WebSocket 实时推送进度（5个阶段）
 - ✅ 查询任务返回完整的图片列表
 - ✅ 支持缩略图转原图（imageMode: originals_only）
+- ✅ 支持图片下载（单个/批量 ZIP）
 
 ### 性能指标
 - API 响应时间 < 200ms（创建任务）
-- SSE 事件延迟 < 100ms
+- WebSocket 消息延迟 < 100ms
 - 支持至少 3 个并发任务
 - 单个任务处理时间与 CLI 模式相当
 
 ### 稳定性
 - 错误处理完善，不会崩溃
-- 自动清理资源（浏览器、连接、内存）
+- 自动清理资源（浏览器、WebSocket 连接、内存）
 - 支持长时间运行
 
 ---
@@ -632,13 +641,13 @@ NODE_ENV=production    # 环境模式
 
 请确认以下内容：
 
-- [ ] API 设计符合 extract.pics 风格
-- [ ] 使用 SSE 而不是 WebSocket
-- [ ] 复用现有爬虫逻辑，使用 twoPhaseApi 模式
-- [ ] 文件结构清晰合理
-- [ ] 数据结构符合预期
-- [ ] 实现步骤可行
-- [ ] 性能和安全考虑充分
+- [x] API 设计符合 extract.pics 风格
+- [x] 使用 WebSocket 进行实时进度推送
+- [x] 复用现有爬虫逻辑，使用 twoPhaseApi 模式
+- [x] 文件结构清晰合理
+- [x] 数据结构符合预期
+- [x] 实现步骤可行
+- [x] 性能和安全考虑充分
 
 ---
 
