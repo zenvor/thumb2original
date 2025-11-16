@@ -14,16 +14,19 @@
 - ✅ 创建提取任务
 - ✅ 查询任务状态和图片列表
 - ✅ SSE 实时进度推送
+- ✅ 下载单张图片
+- ✅ 下载多张图片（ZIP）
 
 ### 2. 技术选型
 - **进度推送**：Server-Sent Events (SSE)
-- **Web 框架**：Express
-- **存储方式**：内存存储（MemoryStorage）
-- **爬虫模式**：复用现有逻辑，使用 `twoPhaseApi` 模式（仅分析，不下载）
+- **Web 框架**：Koa（按用户要求）
+- **存储方式**：内存存储（MemoryStorage + 图片 Buffer 缓存）
+- **爬虫模式**：复用现有逻辑，支持 basic 和 advanced 两种模式
 
 ### 3. 架构原则
 - ✅ CLI 和 API 共享核心爬虫逻辑
-- ✅ API 模式不下载图片，只返回元数据
+- ✅ 支持 basic（仅提取）和 advanced（完整分析）两种模式
+- ✅ 图片 Buffer 临时缓存，支持下载功能
 - ✅ 轻量级设计，易于部署
 
 ---
@@ -36,13 +39,16 @@ thumb2original/
 ├── server.js                         # API 服务器入口（新增）
 │
 ├── server/                           # API 服务器模块（新增）
-│   ├── app.js                        # Express 应用配置
+│   ├── app.js                        # Koa 应用配置
 │   ├── routes/
-│   │   └── extractions.js            # 提取任务路由
+│   │   ├── extractions.js            # 提取任务路由
+│   │   └── downloads.js              # 下载路由
 │   ├── services/
-│   │   └── ExtractionService.js      # 提取服务（核心业务逻辑）
+│   │   ├── ExtractionService.js      # 提取服务（核心业务逻辑）
+│   │   └── DownloadService.js        # 下载服务
 │   ├── storage/
-│   │   └── MemoryStorage.js          # 内存存储
+│   │   ├── MemoryStorage.js          # 任务数据存储
+│   │   └── ImageCache.js             # 图片 Buffer 缓存
 │   └── sse/
 │       └── SSEManager.js             # SSE 管理器
 │
@@ -70,6 +76,8 @@ thumb2original/
 | POST | `/api/extractions` | 创建提取任务 |
 | GET | `/api/extractions/:id` | 查询任务状态和图片列表 |
 | GET | `/api/extractions/:id/stream` | SSE 实时进度推送 |
+| POST | `/api/downloads/single` | 下载单张图片 |
+| POST | `/api/downloads/multiple` | 下载多张图片（ZIP） |
 | GET | `/health` | 健康检查 |
 
 ### 数据结构
@@ -85,8 +93,8 @@ thumb2original/
   "status_changed_at": "2025-11-16T15:03:55.000000Z",
   "trigger": "api|web",
   "options": {
-    "mode": "advanced",
-    "imageMode": "all|originals_only"
+    "mode": "basic|advanced",
+    "ignoreInlineImages": false
   },
   "images": null | [...],
   "images_count": 0,
@@ -98,14 +106,24 @@ thumb2original/
 ```
 
 #### 图片对象 (Image)
+
+**basic 模式**：
+```json
+{
+  "id": "uuid",
+  "url": "https://..."
+}
+```
+
+**advanced 模式**：
 ```json
 {
   "id": "uuid",
   "url": "https://...",
   "name": "filename",
   "basename": "filename.jpg",
-  "size": 123456,
-  "type": "jpeg|png|webp|...",
+  "type": "png|jpeg|webp|...",
+  "size": 185446,
   "width": 1920,
   "height": 1080
 }
@@ -127,6 +145,75 @@ data: {"type":"complete","images_count":21,"status":"done"}
 
 // 错误
 data: {"type":"error","message":"Error message"}
+```
+
+#### 下载端点
+
+**下载单张图片**：
+```http
+POST /api/downloads/single
+Content-Type: application/json
+
+{
+  "extractionId": "1234567890-abc123",
+  "imageId": "uuid"
+}
+
+Response:
+Content-Type: image/jpeg (或 image/png, image/webp 等)
+Content-Disposition: attachment; filename="image-name.jpeg"
+Body: 图片二进制数据
+```
+
+**下载多张图片（ZIP）**：
+```http
+POST /api/downloads/multiple
+Content-Type: application/json
+
+{
+  "extractionId": "1234567890-abc123",
+  "imageIds": ["uuid1", "uuid2", "uuid3"]
+}
+
+Response:
+Content-Type: application/zip
+Content-Disposition: attachment; filename="images.zip"
+Body: ZIP 压缩包二进制数据
+```
+
+**注意**：
+- 下载端点需要先完成提取任务（status 为 'done'）
+- 图片 Buffer 需要临时缓存在内存中
+- ZIP 文件名格式：`{domain}-{timestamp}.zip`
+- 确保使用正确的文件扩展名
+
+#### 提取选项
+
+创建提取任务时支持以下选项：
+
+| 参数 | 类型 | 必需 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `url` | String | ✅ | - | 要提取的网页 URL |
+| `mode` | String | ❌ | `basic` | 提取模式：`basic` 或 `advanced` |
+| `ignoreInlineImages` | Boolean | ❌ | `false` | 是否忽略内联图片（SVG、Base64 等） |
+
+**模式对比**：
+
+| 特性 | basic 模式 | advanced 模式 |
+|------|-----------|---------------|
+| 查找图片 | ✅ | ✅ |
+| 分析元数据 | ❌ | ✅ |
+| 返回字段 | id, url | id, url, name, basename, type, size, width, height |
+| 处理速度 | 快 | 慢 |
+| 适用场景 | 仅需要 URL 列表 | 需要完整图片信息 |
+
+**示例请求**：
+```json
+{
+  "url": "https://example.com",
+  "mode": "advanced",
+  "ignoreInlineImages": true
+}
 ```
 
 ---
@@ -185,28 +272,71 @@ data: {"type":"error","message":"Error message"}
 ```
 
 **关键点**：
-- 使用 `twoPhaseApi` 模式：只分析图片元数据，不下载
+- **basic 模式**：只提取 URL，不下载和分析
+- **advanced 模式**：下载并分析图片，缓存 Buffer
 - 复用现有的 `processDownloadQueue` 函数
 - 通过 SSEManager 发送实时进度
 
-### 4. Routes (server/routes/extractions.js)
-**职责**：定义 API 路由
+### 4. ImageCache (server/storage/ImageCache.js)
+**职责**：临时缓存图片 Buffer（用于下载端点）
 
-**路由定义**：
+**核心方法**：
+- `set(extractionId, imageId, buffer, metadata)` - 缓存图片
+- `get(extractionId, imageId)` - 获取图片
+- `getAll(extractionId)` - 获取提取任务的所有图片
+- `delete(extractionId)` - 删除提取任务的所有图片
+- `cleanup(olderThanMs)` - 清理过期缓存
+
+**特点**：
+- 使用 Map 存储：`extractionId -> Map<imageId, {buffer, metadata}>`
+- 自动过期机制（1小时）
+- 仅在 advanced 模式下使用
+
+### 5. DownloadService (server/services/DownloadService.js)
+**职责**：处理图片下载请求
+
+**核心方法**：
+- `downloadSingle(extractionId, imageId)` - 下载单张图片
+- `downloadMultiple(extractionId, imageIds)` - 下载多张图片（ZIP）
+- `generateZip(images)` - 生成 ZIP 压缩包
+
+**工作流程**：
+```
+单张下载：
+1. 从 ImageCache 获取图片 Buffer
+2. 设置正确的 Content-Type（image/jpeg, image/png 等）
+3. 设置 Content-Disposition（文件名）
+4. 返回二进制数据
+
+批量下载：
+1. 从 ImageCache 获取多个图片 Buffer
+2. 使用 JSZip 创建压缩包
+3. 设置 Content-Type: application/zip
+4. 返回 ZIP 二进制数据
+```
+
+### 6. Routes (server/routes/)
+**提取路由 (extractions.js)**：
 ```javascript
 POST   /api/extractions           → 创建任务
 GET    /api/extractions/:id       → 查询任务
 GET    /api/extractions/:id/stream → SSE 流
 ```
 
-### 5. Express App (server/app.js)
-**职责**：配置 Express 应用
+**下载路由 (downloads.js)**：
+```javascript
+POST   /api/downloads/single      → 下载单张图片
+POST   /api/downloads/multiple    → 下载多张图片（ZIP）
+```
+
+### 7. Koa App (server/app.js)
+**职责**：配置 Koa 应用
 
 **中间件**：
-- CORS
-- JSON body parser
-- 错误处理
-- 日志记录
+- @koa/cors - CORS 支持
+- koa-bodyparser - 请求体解析
+- 错误处理中间件
+- 日志记录中间件
 
 ---
 
@@ -273,20 +403,23 @@ GET    /api/extractions/:id/stream → SSE 流
 
 ## 📝 实现步骤
 
-### 第一阶段：核心模块（已完成）
+### 第一阶段：核心模块 ✅ 已完成
 - [x] SSEManager.js - SSE 连接管理
 - [x] MemoryStorage.js - 内存存储
-- [x] ExtractionService.js - 提取服务
+- [x] ExtractionService.js - 提取服务（已更新支持 basic/advanced 模式）
 
-### 第二阶段：API 路由和服务器
-- [ ] server/routes/extractions.js - API 路由定义
-- [ ] server/app.js - Express 应用配置
-- [ ] server.js - 服务器入口文件
+### 第二阶段：API 路由和服务器 ✅ 已完成
+- [x] server/storage/ImageCache.js - 图片 Buffer 缓存
+- [x] server/services/DownloadService.js - 下载服务
+- [x] server/routes/extractions.js - 提取任务路由
+- [x] server/routes/downloads.js - 下载路由
+- [x] server/app.js - Koa 应用配置
+- [x] server.js - 服务器入口文件
 
-### 第三阶段：测试和示例
-- [ ] 创建测试脚本
+### 第三阶段：测试和示例 ✅ 已完成
+- [x] 创建测试脚本 (test-api.sh)
 - [ ] 创建前端示例（HTML + JavaScript）
-- [ ] API 文档
+- [x] API 文档 (API.md)
 
 ### 第四阶段：优化和完善
 - [ ] 错误处理增强
@@ -318,8 +451,6 @@ GET    /api/extractions/:id/stream → SSE 流
 ## 📦 依赖更新
 
 **现有依赖**（保持）：
-- express
-- cors
 - puppeteer
 - puppeteer-extra
 - puppeteer-extra-plugin-stealth
@@ -330,7 +461,16 @@ GET    /api/extractions/:id/stream → SSE 流
 - pino
 - log-update
 
+**新增依赖**：
+- koa - Web 框架
+- @koa/router - Koa 路由
+- @koa/cors - CORS 支持
+- koa-bodyparser - 请求体解析
+- jszip - 生成 ZIP 压缩包
+
 **移除依赖**：
+- express（改用 Koa）
+- cors（改用 @koa/cors）
 - socket.io（不需要 WebSocket）
 
 ---
@@ -396,18 +536,27 @@ NODE_ENV=production    # 环境模式
 ## ⚠️ 注意事项
 
 ### 1. 与 CLI 模式的区别
-| 特性 | CLI 模式 | API 模式 |
-|------|----------|----------|
-| 下载图片 | ✅ 直接下载到本地 | ❌ 不下载，仅返回元数据 |
-| 配置模式 | 任意模式 | 强制 `twoPhaseApi` |
-| 输出结果 | 本地文件 | JSON 响应 |
-| 进度显示 | 控制台日志 | SSE 事件 |
+| 特性 | CLI 模式 | API 模式（basic） | API 模式（advanced） |
+|------|----------|------------------|---------------------|
+| 下载图片 | ✅ 直接下载到本地 | ❌ 仅返回 URL | ✅ 临时缓存（用于下载端点） |
+| 元数据分析 | ✅ | ❌ | ✅ |
+| 输出结果 | 本地文件 | JSON（仅 URL） | JSON（完整元数据） |
+| 进度显示 | 控制台日志 | SSE 事件 | SSE 事件 |
 
-### 2. twoPhaseApi 模式说明
-- 仅执行图片分析，获取元数据（URL、尺寸、格式）
-- 不下载图片到服务器
-- 不创建下载目录
-- 适合 API 服务，减少服务器存储压力
+### 2. basic vs advanced 模式
+**basic 模式**：
+- 仅提取图片 URL
+- 不下载图片
+- 不分析元数据
+- 处理速度快
+- 返回字段：id, url
+
+**advanced 模式**：
+- 提取图片 URL
+- 下载并分析图片
+- 获取完整元数据（尺寸、格式、文件大小等）
+- 临时缓存 Buffer（用于下载端点）
+- 返回字段：id, url, name, basename, type, size, width, height
 
 ### 3. 安全考虑
 - 添加请求频率限制
