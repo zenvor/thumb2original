@@ -3,7 +3,6 @@
  */
 
 import { ScraperEngine } from '../lib/core/ScraperEngine.js'
-import { nanoid } from 'nanoid'
 import EventEmitter from 'events'
 
 export class TaskManager extends EventEmitter {
