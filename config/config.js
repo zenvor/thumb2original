@@ -13,12 +13,13 @@ export const siteConfigs = {
     // 针对 imx.to 的完整请求头配置，解决 503 错误
     customHeaders: {
       // 修复 Accept 头中的错字，防止服务端解析异常
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      Accept:
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
       'Accept-Encoding': 'gzip, deflate, br, zstd',
       'Accept-Language': 'en-US,en;q=0.9',
       'Cache-Control': 'max-age=0',
-      'Connection': 'keep-alive',
-      'DNT': '1',
+      Connection: 'keep-alive',
+      DNT: '1',
       'Sec-Fetch-Dest': 'document',
       'Sec-Fetch-Mode': 'navigate',
       'Sec-Fetch-Site': 'same-site',
@@ -26,21 +27,21 @@ export const siteConfigs = {
       'Upgrade-Insecure-Requests': '1',
       'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
       'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"macOS"'
-    }
+      'sec-ch-ua-platform': '"macOS"',
+    },
   },
   'chpic.su': {
     waitTime: 2000,
     selectorWaitTime: 5000,
     needsReferer: false,
-    downloadStrategy: 'axios'
+    downloadStrategy: 'axios',
   },
-  'default': {
+  default: {
     waitTime: 5000, // 增加默认等待时间以处理大图片
     selectorWaitTime: 15000, // 增加默认选择器等待时间以处理大图片
     needsReferer: false,
-    downloadStrategy: 'puppeteer'
-  }
+    downloadStrategy: 'puppeteer',
+  },
 }
 
 /**
@@ -108,8 +109,8 @@ export const siteConfigs = {
 /** @type {ScraperConfig} */
 export const scraperConfig = {
   // --- 核心模式 ---
-  scrapeMode: 'local_html', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
-  imageMode: 'originals_only', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
+  scrapeMode: 'multiple_pages', // 抓取模式: 'single_page' (单页) | 'multiple_pages' (多页) | 'local_html' (本地HTML爬虫模式)
+  imageMode: 'all', // 图片模式: 'all' (所有图片) | 'originals_only' (仅原图)
 
   // --- 图片发现范围（可控开关） ---
   imageDiscovery: {
@@ -117,23 +118,23 @@ export const scraperConfig = {
     includeFavicon: false, // 是否包含网站 favicon（link rel="icon" 等）
     includeCssBackgrounds: false, // 是否解析 CSS background-image/url(...) 与 --svg 变量
     includeDataUri: false, // 是否包含 data:image/* URI（可能带来噪声，默认关闭）
-    includeSrcset: false // 是否解析 img 标签的 srcset 属性中的图片链接（默认开启）
+    includeSrcset: false, // 是否解析 img 标签的 srcset 属性中的图片链接（默认开启）
   },
 
   // --- HTML 页面处理策略 ---
   htmlHandling: {
-    retryHtmlAsFailure: true // 遇到 HTML 响应时直接标记为失败并重试，而非尝试解析页面内容（默认开启，更简洁稳定）
+    retryHtmlAsFailure: true, // 遇到 HTML 响应时直接标记为失败并重试，而非尝试解析页面内容（默认开启，更简洁稳定）
   },
 
   // --- 调试选项 ---
   debug: {
-    logImageUrls: false // 是否打印所有原始图片链接（调试用）
+    logImageUrls: false, // 是否打印所有原始图片链接（调试用）
   },
 
   // --- 本地HTML爬虫模式配置 ---
   htmlDirectory: './html', // 本地HTML文件目录路径
   htmlSortOrder: 'name', // HTML文件排序方式: 'name' (按文件名，默认) | 'mtime_asc' (按修改时间从旧到新) | 'mtime_desc' (按修改时间从新到旧)
-  
+
   // 记忆功能配置
   enableMemory: true, // 是否启用记忆功能，跳过已处理的HTML文件
   memoryDirectory: './memory', // 记忆目录路径（每个HTML文件对应一个JSONL文件）
@@ -148,14 +149,14 @@ export const scraperConfig = {
     enableAdvancedArgs: true, // 是否启用高级浏览器参数
     windowSize: '1366,768', // 浏览器窗口大小
     userAgent: null, // 自定义 User Agent (null 则使用默认)
-    randomizeFingerprint: false // 是否随机化浏览器指纹 (需要额外插件)
+    randomizeFingerprint: false, // 是否随机化浏览器指纹 (需要额外插件)
   },
 
   // --- 目标 URL ---
   targetUrl: 'https://nuxt.com/', // 目标网址 (单页模式)
   targetUrls: [
     // 目标网址列表 (多页模式)
-    'https://www.duitang.com/category/?cat=wallpaper',
+    // 'https://www.duitang.com/category/?cat=wallpaper',
     // 'https://www.duitang.com/category/?cat=wallpaper#!hot-p2',
     // 'https://nuxt.com/'
   ],
@@ -178,7 +179,7 @@ export const scraperConfig = {
     maxPageRetries: 3, // 页面加载失败最大重试次数
     retryDelay: 2000, // 重试间隔时间 (毫秒)
     enableErrorRecovery: true, // 是否启用错误恢复机制
-    connectionCheckInterval: 30000 // 浏览器连接检查间隔 (毫秒)
+    connectionCheckInterval: 30000, // 浏览器连接检查间隔 (毫秒)
   },
 
   // --- 图片格式处理 ---
@@ -190,7 +191,7 @@ export const scraperConfig = {
     // 默认统一转换为 PNG（与历史默认“WebP→PNG”对齐，同时提供全局统一策略）
     convertTo: 'none',
     // 防止文件名冲突：当同名文件存在时，在文件名后添加URL路径的哈希后缀
-    preventNameCollision: false
+    preventNameCollision: false,
   },
 
   // --- 图片分析（P0 预留并启用） ---
@@ -198,13 +199,13 @@ export const scraperConfig = {
     // 预设模式（后续映射在校验器中实现）：'strict' | 'balanced' | 'loose'
     preset: 'balanced',
     // 开启严格模式：元数据解析异常将直接判定为 metadata_error 已确认默认行为，无需必填
-    // strictValidation: false, 
+    // strictValidation: false,
     enableDetailLog: false,
     // P1：可观测性 - 是否输出每张分析耗时的 debug 日志
     logAnalyzeCost: false,
     sampleRate: 100,
-    // 显式覆盖动态采样 
-    /** 
+    // 显式覆盖动态采样
+    /**
      * 小建议
      * 小批量想看更细日志：设置较小值（例如 50）。
      * 大批量想降噪固定间隔：设置较大值（例如 1000）。
@@ -228,8 +229,8 @@ export const scraperConfig = {
     cleanupTempOnComplete: true,
     // 冷启动清理与内存持有（按需调整）
     cleanupTempOnStart: true,
-    maxHoldBuffers: 0
-  }
+    maxHoldBuffers: 0,
+  },
 }
 
 // 测试与开发者指南：
