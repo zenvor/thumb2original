@@ -6,6 +6,8 @@ import http from 'http'
 import { WebSocketServer } from 'ws'
 import { createApp } from './server/app.js'
 import { logger } from './utils/logger.js'
+import { getDatabase, closeDatabase } from './lib/database/ImageAnalysisDB.js'
+import { scraperConfig } from './config/config.js'
 
 const PORT = process.env.PORT || 3000
 const WS_PORT = process.env.WS_PORT || 8080
@@ -13,6 +15,33 @@ const HOST = process.env.HOST || '0.0.0.0'
 
 async function start() {
   try {
+    // 初始化数据库（如果启用）
+    let cleanupInterval = null
+    const db = getDatabase(scraperConfig)
+    if (db) {
+      try {
+        await db.init()
+        logger.info('数据库已初始化', 'system')
+
+        // 设置自动清理定时器
+        if (scraperConfig.database.autoCleanup) {
+          cleanupInterval = setInterval(() => {
+            try {
+              const deleted = db.cleanupOldTasks()
+              if (deleted > 0) {
+                logger.info(`自动清理完成: 删除 ${deleted} 个过期任务`, 'system')
+              }
+            } catch (error) {
+              logger.warn(`自动清理失败: ${error.message}`, 'system')
+            }
+          }, scraperConfig.database.cleanupInterval)
+          logger.info(`数据库自动清理已启用 (间隔: ${scraperConfig.database.cleanupInterval / 1000}秒)`, 'system')
+        }
+      } catch (error) {
+        logger.warn(`数据库初始化失败: ${error.message}`, 'system')
+      }
+    }
+
     const app = createApp()
 
     // 创建 HTTP 服务器
@@ -93,6 +122,18 @@ async function start() {
     // 优雅关闭
     const shutdown = () => {
       logger.info('Shutting down gracefully...')
+
+      // 清理数据库定时器
+      if (cleanupInterval) {
+        clearInterval(cleanupInterval)
+        logger.info('数据库自动清理已停止', 'system')
+      }
+
+      // 关闭数据库连接
+      if (db) {
+        closeDatabase()
+      }
+
       server.close(() => {
         wss.close(() => {
           logger.info('Server closed')
