@@ -45,10 +45,15 @@ export function createApp() {
     logger.info(`${ctx.method} ${ctx.url} - ${ctx.status} - ${ms}ms`)
   })
 
-  // CORS
+  // CORS - 支持跨域请求
   app.use(cors({
-    origin: '*',
+    origin: (ctx) => {
+      // 允许所有来源，动态返回请求的 Origin
+      return ctx.get('Origin') || '*'
+    },
     credentials: true,
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'Accept'],
     maxAge: 86400
   }))
 
