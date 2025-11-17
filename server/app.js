@@ -6,6 +6,7 @@ import Koa from 'koa'
 import cors from '@koa/cors'
 import bodyParser from 'koa-bodyparser'
 import { logger } from '../utils/logger.js'
+import { scraperConfig } from '../config/config.js'
 import { MemoryStorage } from './storage/MemoryStorage.js'
 import { ImageCache } from './storage/ImageCache.js'
 import { WebSocketManager } from './websocket/WebSocketManager.js'
@@ -21,7 +22,7 @@ export function createApp() {
   const storage = new MemoryStorage()
   const imageCache = new ImageCache()
   const wsManager = new WebSocketManager()
-  const extractionService = new ExtractionService(storage, wsManager, imageCache)
+  const extractionService = new ExtractionService(storage, wsManager, imageCache, scraperConfig)
   const downloadService = new DownloadService(storage, imageCache)
 
   // 错误处理中间件
