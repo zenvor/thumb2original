@@ -10,6 +10,7 @@ import { processUrlsByImageMode } from './lib/imageModeProcessor.js'
 import { processLocalHtmlMode } from './lib/localHtmlProcessor.js'
 import { scrapeUrl } from './lib/publicApi.js'
 import { toLogMeta } from './utils/errors.js'
+import { getDatabase, closeDatabase } from './lib/database/ImageAnalysisDB.js'
 
 // ============================== 辅助函数 ==============================
 function startProgressIfEnabled() {
@@ -100,6 +101,34 @@ async function runImageScraper(config) {
   logger.info('日志系统已初始化', 'system')
   // 配置校验与默认值填充
   config = await validateAndNormalizeConfig(config)
+
+  // 初始化数据库（如果启用）
+  let cleanupInterval = null
+  const db = getDatabase(config)
+  if (db) {
+    try {
+      await db.init()
+      logger.info('数据库已初始化', 'system')
+
+      // 设置自动清理定时器
+      if (config.database.autoCleanup) {
+        cleanupInterval = setInterval(() => {
+          try {
+            const deleted = db.cleanupOldTasks()
+            if (deleted > 0) {
+              logger.info(`自动清理完成: 删除 ${deleted} 个过期任务`, 'system')
+            }
+          } catch (error) {
+            logger.warn(`自动清理失败: ${error.message}`, 'system')
+          }
+        }, config.database.cleanupInterval)
+        logger.info(`数据库自动清理已启用 (间隔: ${config.database.cleanupInterval / 1000}秒)`, 'system')
+      }
+    } catch (error) {
+      logger.warn(`数据库初始化失败: ${error.message}`, 'system')
+    }
+  }
+
   // 启动浏览器（含 stealth/监控）
   let browser, stopMonitoring
   const launched = await initBrowser(config)
@@ -118,6 +147,17 @@ async function runImageScraper(config) {
   } catch (error) {
     logger.error(`发生了一个严重错误: ${error.message}`, 'system', toLogMeta(error))
   } finally {
+    // 清理定时器
+    if (cleanupInterval) {
+      clearInterval(cleanupInterval)
+      logger.info('数据库自动清理已停止', 'system')
+    }
+
+    // 关闭数据库连接
+    if (db) {
+      closeDatabase()
+    }
+
     stopProgressIfEnabled()
     await cleanupBrowser(browser, stopMonitoring)
     const duration = (Date.now() - startTime) / 1000
