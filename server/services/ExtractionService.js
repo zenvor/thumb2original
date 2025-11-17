@@ -34,7 +34,8 @@ export class ExtractionService {
       trigger: options.trigger || 'api',
       options: {
         mode: options.mode || 'advanced',
-        imageMode: options.imageMode || 'all'
+        imageMode: options.imageMode || 'all',
+        ignoreInlineImages: options.ignoreInlineImages || false
       },
       images: null,
       images_count: 0,
@@ -44,9 +45,16 @@ export class ExtractionService {
 
     await this.storage.create(task)
 
+    logger.info(`[${taskId}] 🚀 Created extraction task:`, {
+      url,
+      mode: task.options.mode,
+      imageMode: task.options.imageMode,
+      ignoreInlineImages: task.options.ignoreInlineImages
+    })
+
     // 异步执行提取任务
     this.executeExtraction(taskId).catch(error => {
-      logger.error(`Extraction ${taskId} failed:`, error)
+      logger.error(`[${taskId}] ❌ Extraction failed:`, error)
     })
 
     return task
@@ -68,8 +76,15 @@ export class ExtractionService {
       const task = await this.storage.get(taskId)
       if (!task) throw new Error('Task not found')
 
+      logger.info(`[${taskId}] 🏃 Starting extraction execution`)
+
       // 构建配置
       const config = await this.buildConfig(task)
+      logger.info(`[${taskId}] ⚙️ Config built:`, {
+        imageMode: config.imageMode,
+        analysisMode: config.analysis?.mode,
+        includeInlineImages: config.imageDiscovery?.includeInlineImages
+      })
 
       // 启动浏览器
       const launched = await launchBrowser(config)
@@ -95,6 +110,8 @@ export class ExtractionService {
       this.wsManager.sendProgress(taskId, 'Finding images...', 60)
       const imageUrls = await extractImageUrls(page, task.url, config.imageDiscovery)
 
+      logger.info(`[${taskId}] 🔍 Found ${imageUrls.length} raw image URLs`)
+
       // 处理图片模式
       const finalImageUrls = await processUrlsByImageMode(
         page,
@@ -104,9 +121,12 @@ export class ExtractionService {
         config
       )
 
+      logger.info(`[${taskId}] ✅ After imageMode processing: ${finalImageUrls.length} images (mode: ${config.imageMode})`)
+
       await page.close()
 
       if (finalImageUrls.length === 0) {
+        logger.warn(`[${taskId}] ⚠️ No images found after processing`)
         await this.updateTaskStatus(taskId, 'done', {
           images: [],
           images_count: 0,
@@ -118,6 +138,7 @@ export class ExtractionService {
 
       // 根据模式处理图片
       const mode = task.options.mode || 'basic'
+      logger.info(`[${taskId}] 📊 Processing in ${mode} mode`)
       let images = []
 
       if (mode === 'basic') {
@@ -127,9 +148,11 @@ export class ExtractionService {
           url: url
         }))
 
+        logger.info(`[${taskId}] ✨ Basic mode: created ${images.length} image entries`)
         this.wsManager.sendProgress(taskId, 'Done', 100)
       } else {
         // advanced 模式：分析图片并缓存
+        logger.info(`[${taskId}] 🔬 Advanced mode: analyzing ${finalImageUrls.length} images...`)
         this.wsManager.sendProgress(taskId, 'Analyzing images...', 80)
 
         const downloadedImages = []
@@ -152,16 +175,26 @@ export class ExtractionService {
           downloadedImages
         )
 
+        logger.info(`[${taskId}] 📦 Download queue result:`, {
+          validEntries: result.validEntries?.length || 0,
+          failedDownloads: result.failedDownloads?.length || 0,
+          totalProcessed: result.totalProcessed || 0
+        })
+
         // 转换为 API 响应格式并缓存
         images = this.formatImages(result.validEntries || [], taskId)
+        logger.info(`[${taskId}] ✨ Advanced mode: formatted ${images.length} images with metadata`)
       }
 
       // 更新任务为完成
+      logger.info(`[${taskId}] 💾 Saving ${images.length} images to storage`)
       await this.updateTaskStatus(taskId, 'done', {
         images,
         images_count: images.length,
         message: null
       })
+
+      logger.info(`[${taskId}] 🎉 Task completed successfully with ${images.length} images`)
 
       this.wsManager.sendProgress(taskId, 'Done', 100)
       this.wsManager.sendComplete(taskId, {
