@@ -12,10 +12,11 @@ import { processDownloadQueue } from '../../lib/downloadQueue.js'
 import { toLogMeta } from '../../utils/errors.js'
 
 export class ExtractionService {
-  constructor(storage, wsManager, imageCache) {
+  constructor(storage, wsManager, imageCache, globalConfig = null) {
     this.storage = storage
     this.wsManager = wsManager
     this.imageCache = imageCache
+    this.globalConfig = globalConfig
   }
 
   /**
@@ -333,7 +334,9 @@ export class ExtractionService {
       },
       imageDiscovery: {
         includeInlineImages: !task.options.ignoreInlineImages
-      }
+      },
+      // 继承全局配置的 database 设置
+      database: this.globalConfig?.database || {}
     }
 
     return await validateAndNormalizeConfig(baseConfig)
