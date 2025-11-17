@@ -175,11 +175,35 @@ export class ExtractionService {
           downloadedImages
         )
 
-        logger.info(`[${taskId}] 📦 Download queue result:`, {
-          validEntries: result.validEntries?.length || 0,
-          failedDownloads: result.failedDownloads?.length || 0,
-          totalProcessed: result.totalProcessed || 0
+        logger.info(`[${taskId}] 📦 Download queue raw result:`, {
+          hasResult: !!result,
+          resultKeys: result ? Object.keys(result) : [],
+          validEntriesType: typeof result?.validEntries,
+          validEntriesIsArray: Array.isArray(result?.validEntries),
+          validEntriesLength: result?.validEntries?.length || 0,
+          downloadedImagesLength: downloadedImages.length,
+          failedDownloads: result?.failedDownloads?.length || 0,
+          totalProcessed: result?.totalProcessed || 0
         })
+
+        // 打印第一个 validEntry 的结构（如果有）
+        if (result?.validEntries && result.validEntries.length > 0) {
+          logger.info(`[${taskId}] 🔍 First validEntry structure:`, {
+            keys: Object.keys(result.validEntries[0]),
+            hasUrl: !!result.validEntries[0].url,
+            hasAnalysisResult: !!result.validEntries[0].analysisResult,
+            analysisResultKeys: result.validEntries[0].analysisResult ? Object.keys(result.validEntries[0].analysisResult) : []
+          })
+        }
+
+        // 如果 validEntries 是空的，检查 downloadedImages
+        if ((!result?.validEntries || result.validEntries.length === 0) && downloadedImages.length > 0) {
+          logger.warn(`[${taskId}] ⚠️ validEntries is empty but downloadedImages has ${downloadedImages.length} items`)
+          logger.info(`[${taskId}] 🔍 First downloadedImage structure:`, {
+            keys: Object.keys(downloadedImages[0]),
+            sample: downloadedImages[0]
+          })
+        }
 
         // 转换为 API 响应格式并缓存
         images = this.formatImages(result.validEntries || [], taskId)
@@ -227,7 +251,21 @@ export class ExtractionService {
    * 同时缓存图片 Buffer
    */
   formatImages(validEntries, taskId) {
-    return validEntries.map(entry => {
+    logger.info(`[${taskId}] 🎨 formatImages called with ${validEntries.length} entries`)
+
+    if (validEntries.length === 0) {
+      logger.warn(`[${taskId}] ⚠️ formatImages received empty validEntries array`)
+      return []
+    }
+
+    const formatted = validEntries.map((entry, index) => {
+      logger.debug(`[${taskId}] 🖼️ Processing entry ${index + 1}:`, {
+        hasUrl: !!entry.url,
+        url: entry.url,
+        hasAnalysisResult: !!entry.analysisResult,
+        analysisResultKeys: entry.analysisResult ? Object.keys(entry.analysisResult) : []
+      })
+
       const imageId = this.generateId()
       const name = this.extractFileName(entry.url)
       const type = entry.analysisResult?.metadata?.format || 'unknown'
@@ -237,6 +275,7 @@ export class ExtractionService {
 
       // 缓存图片 Buffer（如果有）
       if (entry.analysisResult?.buffer) {
+        logger.debug(`[${taskId}] 💾 Caching buffer for image ${index + 1} (${type}, ${width}x${height})`)
         this.imageCache.set(taskId, imageId, entry.analysisResult.buffer, {
           format: type,
           width: width,
@@ -244,9 +283,11 @@ export class ExtractionService {
           name: name,
           basename: name ? `${name}.${type}` : undefined
         })
+      } else {
+        logger.warn(`[${taskId}] ⚠️ No buffer found for entry ${index + 1}`)
       }
 
-      return {
+      const formatted = {
         id: imageId,
         url: entry.url,
         name: name,
@@ -256,7 +297,13 @@ export class ExtractionService {
         width: width,
         height: height
       }
+
+      logger.debug(`[${taskId}] ✅ Formatted entry ${index + 1}:`, formatted)
+      return formatted
     })
+
+    logger.info(`[${taskId}] 🎨 formatImages returning ${formatted.length} formatted images`)
+    return formatted
   }
 
   /**
