@@ -234,9 +234,9 @@ export const scraperConfig = {
 
   /**
    * 数据库配置（用于图片分析结果持久化存储）
+   * 注意：数据库始终启用，不再支持临时文件存储
    */
   database: {
-    enabled: true,                      // 是否启用数据库存储（已启用）
     path: './data/analysis.db',         // 数据库文件路径
     enableWAL: true,                    // 启用 WAL 模式（提高并发性能）
     retentionHours: 24,                 // 数据保留时间（小时）

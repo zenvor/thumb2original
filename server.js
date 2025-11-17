@@ -15,31 +15,26 @@ const HOST = process.env.HOST || '0.0.0.0'
 
 async function start() {
   try {
-    // 初始化数据库（如果启用）
+    // 初始化数据库
     let cleanupInterval = null
     const db = getDatabase(scraperConfig)
-    if (db) {
-      try {
-        await db.init()
-        logger.info('数据库已初始化', 'system')
 
-        // 设置自动清理定时器
-        if (scraperConfig.database.autoCleanup) {
-          cleanupInterval = setInterval(() => {
-            try {
-              const deleted = db.cleanupOldTasks()
-              if (deleted > 0) {
-                logger.info(`自动清理完成: 删除 ${deleted} 个过期任务`, 'system')
-              }
-            } catch (error) {
-              logger.warn(`自动清理失败: ${error.message}`, 'system')
-            }
-          }, scraperConfig.database.cleanupInterval)
-          logger.info(`数据库自动清理已启用 (间隔: ${scraperConfig.database.cleanupInterval / 1000}秒)`, 'system')
+    await db.init()
+    logger.info('数据库已初始化', 'system')
+
+    // 设置自动清理定时器
+    if (scraperConfig.database.autoCleanup) {
+      cleanupInterval = setInterval(() => {
+        try {
+          const deleted = db.cleanupOldTasks()
+          if (deleted > 0) {
+            logger.info(`自动清理完成: 删除 ${deleted} 个过期任务`, 'system')
+          }
+        } catch (error) {
+          logger.warn(`自动清理失败: ${error.message}`, 'system')
         }
-      } catch (error) {
-        logger.warn(`数据库初始化失败: ${error.message}`, 'system')
-      }
+      }, scraperConfig.database.cleanupInterval)
+      logger.info(`数据库自动清理已启用 (间隔: ${scraperConfig.database.cleanupInterval / 1000}秒)`, 'system')
     }
 
     const app = createApp()
@@ -130,9 +125,7 @@ async function start() {
       }
 
       // 关闭数据库连接
-      if (db) {
-        closeDatabase()
-      }
+      closeDatabase()
 
       server.close(() => {
         wss.close(() => {
