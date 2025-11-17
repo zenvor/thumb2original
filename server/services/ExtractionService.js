@@ -178,35 +178,32 @@ export class ExtractionService {
         logger.info(`[${taskId}] 📦 Download queue raw result:`, {
           hasResult: !!result,
           resultKeys: result ? Object.keys(result) : [],
-          validEntriesType: typeof result?.validEntries,
-          validEntriesIsArray: Array.isArray(result?.validEntries),
+          hasTempFiles: !!result?.tempFiles,
+          tempFilesLength: result?.tempFiles?.length || 0,
+          hasValidEntries: !!result?.validEntries,
           validEntriesLength: result?.validEntries?.length || 0,
           downloadedImagesLength: downloadedImages.length,
-          failedDownloads: result?.failedDownloads?.length || 0,
-          totalProcessed: result?.totalProcessed || 0
+          analyzed: result?.analyzed || 0
         })
 
-        // 打印第一个 validEntry 的结构（如果有）
-        if (result?.validEntries && result.validEntries.length > 0) {
-          logger.info(`[${taskId}] 🔍 First validEntry structure:`, {
-            keys: Object.keys(result.validEntries[0]),
-            hasUrl: !!result.validEntries[0].url,
-            hasAnalysisResult: !!result.validEntries[0].analysisResult,
-            analysisResultKeys: result.validEntries[0].analysisResult ? Object.keys(result.validEntries[0].analysisResult) : []
-          })
-        }
+        // twoPhaseApi 模式返回 tempFiles，其他模式返回 validEntries
+        const entries = result?.tempFiles || result?.validEntries || []
 
-        // 如果 validEntries 是空的，检查 downloadedImages
-        if ((!result?.validEntries || result.validEntries.length === 0) && downloadedImages.length > 0) {
-          logger.warn(`[${taskId}] ⚠️ validEntries is empty but downloadedImages has ${downloadedImages.length} items`)
-          logger.info(`[${taskId}] 🔍 First downloadedImage structure:`, {
-            keys: Object.keys(downloadedImages[0]),
-            sample: downloadedImages[0]
+        logger.info(`[${taskId}] 📊 Using entries from: ${result?.tempFiles ? 'tempFiles' : 'validEntries'}, count: ${entries.length}`)
+
+        // 打印第一个 entry 的结构（如果有）
+        if (entries.length > 0) {
+          logger.info(`[${taskId}] 🔍 First entry structure:`, {
+            keys: Object.keys(entries[0]),
+            hasUrl: !!entries[0].url,
+            hasAnalysisResult: !!entries[0].analysisResult,
+            analysisResultKeys: entries[0].analysisResult ? Object.keys(entries[0].analysisResult) : [],
+            hasTempPath: !!entries[0].tempPath
           })
         }
 
         // 转换为 API 响应格式并缓存
-        images = this.formatImages(result.validEntries || [], taskId)
+        images = this.formatImages(entries, taskId)
         logger.info(`[${taskId}] ✨ Advanced mode: formatted ${images.length} images with metadata`)
       }
 
