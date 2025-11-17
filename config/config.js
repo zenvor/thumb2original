@@ -222,9 +222,9 @@ export const scraperConfig = {
     // P2：twoPhase 模式配置（默认 inline）
     // 支持: 'inline' | 'twoPhase' | 'twoPhaseApi'
     // - inline: 分析与下载同步进行（现有默认逻辑）
-    // - twoPhase: 先分析写入临时文件，再统一读取临时文件进行下载
-    // - twoPhaseApi: 仅执行分析并写入临时文件，跳过下载（供 API 使用）
-    mode: 'inline',
+    // - twoPhase: 先分析写入临时文件，再统一读取临时文件进行下载（支持数据库）
+    // - twoPhaseApi: 仅执行分析并写入临时文件，跳过下载（供 API 使用，支持数据库）
+    mode: 'twoPhase',
     tempDir: './.tmp_analysis',
     cleanupTempOnComplete: true,
     // 冷启动清理与内存持有（按需调整）
@@ -236,7 +236,7 @@ export const scraperConfig = {
    * 数据库配置（用于图片分析结果持久化存储）
    */
   database: {
-    enabled: false,                     // 是否启用数据库存储（默认关闭）
+    enabled: true,                      // 是否启用数据库存储（已启用）
     path: './data/analysis.db',         // 数据库文件路径
     enableWAL: true,                    // 启用 WAL 模式（提高并发性能）
     retentionHours: 24,                 // 数据保留时间（小时）
