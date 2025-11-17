@@ -159,6 +159,7 @@ export class ExtractionService {
         const downloadedImages = []
         const context = {
           browser,
+          url: task.url, // 添加 URL 用于数据库记录
           config: {
             ...config,
             analysis: {
@@ -192,34 +193,39 @@ export class ExtractionService {
 
         logger.info(`[${taskId}] 📊 Using entries from: ${result?.tempFiles ? 'tempFiles' : 'validEntries'}, count: ${entries.length}`)
 
-        // 检查是否使用了数据库存储
-        const usedDatabase = entries.length > 0 && entries[0].fromDatabase
-        if (usedDatabase && result?.getImagesWithBuffers) {
-          logger.info(`[${taskId}] 🗄️ Fetching images with buffers from database...`)
-          const imagesFromDb = await result.getImagesWithBuffers()
+        // twoPhaseApi 模式下，始终从数据库获取带 buffer 的图片
+        // 不依赖 fromDatabase 标记，因为该模式下所有图片都存储在数据库中
+        if (entries.length > 0 && result?.getImagesWithBuffers) {
+          try {
+            logger.info(`[${taskId}] 🗄️ Fetching images with buffers from database...`)
+            const imagesFromDb = await result.getImagesWithBuffers()
 
-          if (imagesFromDb && imagesFromDb.length > 0) {
-            logger.info(`[${taskId}] 📦 Retrieved ${imagesFromDb.length} images from database`)
+            if (imagesFromDb && imagesFromDb.length > 0) {
+              logger.info(`[${taskId}] 📦 Retrieved ${imagesFromDb.length} images from database`)
 
-            // 将数据库格式转换为 formatImages 期望的格式
-            entries = imagesFromDb.map(img => ({
-              url: img.url,
-              headers: img.headers,
-              analysisResult: {
-                buffer: img.buffer,
-                metadata: {
-                  format: img.format,
-                  width: img.width,
-                  height: img.height,
-                  size: img.size
-                }
-              },
-              sequenceNumber: img.sequence_number
-            }))
+              // 将数据库格式转换为 formatImages 期望的格式
+              entries = imagesFromDb.map(img => ({
+                url: img.url,
+                headers: img.headers,
+                analysisResult: {
+                  buffer: img.buffer,
+                  metadata: {
+                    format: img.format,
+                    width: img.width,
+                    height: img.height,
+                    size: img.size
+                  }
+                },
+                sequenceNumber: img.sequence_number
+              }))
 
-            logger.info(`[${taskId}] ✅ Converted ${entries.length} database entries to analysis format`)
-          } else {
-            logger.warn(`[${taskId}] ⚠️ Database returned empty results`)
+              logger.info(`[${taskId}] ✅ Converted ${entries.length} database entries to analysis format`)
+            } else {
+              logger.warn(`[${taskId}] ⚠️ Database returned empty results, will use entries without buffers`)
+            }
+          } catch (dbError) {
+            logger.error(`[${taskId}] ❌ Failed to fetch images from database:`, toLogMeta(dbError))
+            logger.warn(`[${taskId}] ⚠️ Continuing with entries without buffers (download功能将不可用)`)
           }
         }
 
