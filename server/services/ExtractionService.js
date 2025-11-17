@@ -12,10 +12,11 @@ import { processDownloadQueue } from '../../lib/downloadQueue.js'
 import { toLogMeta } from '../../utils/errors.js'
 
 export class ExtractionService {
-  constructor(storage, wsManager, imageCache) {
+  constructor(storage, wsManager, imageCache, globalConfig = null) {
     this.storage = storage
     this.wsManager = wsManager
     this.imageCache = imageCache
+    this.globalConfig = globalConfig
   }
 
   /**
@@ -187,9 +188,40 @@ export class ExtractionService {
         })
 
         // twoPhaseApi 模式返回 tempFiles，其他模式返回 validEntries
-        const entries = result?.tempFiles || result?.validEntries || []
+        let entries = result?.tempFiles || result?.validEntries || []
 
         logger.info(`[${taskId}] 📊 Using entries from: ${result?.tempFiles ? 'tempFiles' : 'validEntries'}, count: ${entries.length}`)
+
+        // 检查是否使用了数据库存储
+        const usedDatabase = entries.length > 0 && entries[0].fromDatabase
+        if (usedDatabase && result?.getImagesWithBuffers) {
+          logger.info(`[${taskId}] 🗄️ Fetching images with buffers from database...`)
+          const imagesFromDb = await result.getImagesWithBuffers()
+
+          if (imagesFromDb && imagesFromDb.length > 0) {
+            logger.info(`[${taskId}] 📦 Retrieved ${imagesFromDb.length} images from database`)
+
+            // 将数据库格式转换为 formatImages 期望的格式
+            entries = imagesFromDb.map(img => ({
+              url: img.url,
+              headers: img.headers,
+              analysisResult: {
+                buffer: img.buffer,
+                metadata: {
+                  format: img.format,
+                  width: img.width,
+                  height: img.height,
+                  size: img.size
+                }
+              },
+              sequenceNumber: img.sequence_number
+            }))
+
+            logger.info(`[${taskId}] ✅ Converted ${entries.length} database entries to analysis format`)
+          } else {
+            logger.warn(`[${taskId}] ⚠️ Database returned empty results`)
+          }
+        }
 
         // 打印第一个 entry 的结构（如果有）
         if (entries.length > 0) {
@@ -198,7 +230,8 @@ export class ExtractionService {
             hasUrl: !!entries[0].url,
             hasAnalysisResult: !!entries[0].analysisResult,
             analysisResultKeys: entries[0].analysisResult ? Object.keys(entries[0].analysisResult) : [],
-            hasTempPath: !!entries[0].tempPath
+            hasTempPath: !!entries[0].tempPath,
+            fromDatabase: entries[0].fromDatabase
           })
         }
 
@@ -333,7 +366,9 @@ export class ExtractionService {
       },
       imageDiscovery: {
         includeInlineImages: !task.options.ignoreInlineImages
-      }
+      },
+      // 继承全局配置的 database 设置
+      database: this.globalConfig?.database || {}
     }
 
     return await validateAndNormalizeConfig(baseConfig)
