@@ -18,8 +18,23 @@ async function start() {
     // 创建 HTTP 服务器
     const server = http.createServer(app.callback())
 
-    // 创建 WebSocket 服务器
-    const wss = new WebSocketServer({ port: WS_PORT })
+    // 创建 WebSocket 服务器（支持跨域）
+    const wss = new WebSocketServer({
+      port: WS_PORT,
+      // 验证客户端连接（处理跨域）
+      verifyClient: (info) => {
+        // 允许所有来源的 WebSocket 连接
+        // 生产环境建议根据 Origin 头进行验证
+        const origin = info.origin || info.req.headers.origin
+
+        if (origin) {
+          logger.debug(`WebSocket connection from origin: ${origin}`)
+        }
+
+        // 返回 true 允许连接
+        return true
+      }
+    })
 
     logger.info(`🚀 thumb2original API server starting...`)
 
