@@ -101,11 +101,13 @@ export class ExtractionService {
 
       // 加载页面
       this.wsManager.sendProgress(taskId, 'Loading page...', 20)
-      const pageTitle = await loadAndScrollPage(page, task.url, config)
-
-      // 滚动页面
-      this.wsManager.sendProgress(taskId, 'Scrolling down...', 40)
-      // loadAndScrollPage 已包含滚动
+      const pageTitle = await loadAndScrollPage(
+        page,
+        task.url,
+        config,
+        // 传递进度回调，在滚动开始时推送进度
+        () => this.wsManager.sendProgress(taskId, 'Scrolling down...', 40)
+      )
 
       // 查找图片
       this.wsManager.sendProgress(taskId, 'Finding images...', 60)
