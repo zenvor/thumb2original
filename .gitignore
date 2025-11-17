@@ -25,3 +25,21 @@ selenium-debug.log
 
 package-lock.json
 yarn.lock
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+.tmp_analysis/
+*.tmp
+
+# PM2
+.pm2/
+ecosystem.config.js
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml

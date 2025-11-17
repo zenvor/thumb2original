@@ -1,20 +1,36 @@
 {
   "name": "thumb2original",
-  "version": "1.0.0",
-  "description": "",
+  "version": "2.0.0",
+  "description": "A powerful image scraper that converts thumbnails to original images, supports both CLI and API server modes",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "start": "node index.js",
+    "server": "node server.js",
+    "dev": "node --watch server.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "keywords": [
+    "scraper",
+    "crawler",
+    "image",
+    "thumbnail",
+    "downloader",
+    "api",
+    "cli"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@koa/cors": "^5.0.0",
+    "@koa/router": "^12.0.1",
     "axios": "^1.5.0",
     "cheerio-without-node-native": "^1.0.0-rc.2",
     "image-size": "^2.0.2",
+    "jszip": "^3.10.1",
+    "koa": "^2.15.0",
+    "koa-bodyparser": "^4.4.1",
     "lodash": "^4.17.21",
     "log-update": "^6.1.0",
     "p-limit": "^6.2.0",
@@ -24,7 +40,8 @@
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "sharp": "^0.33.3",
-    "svg-parser": "^2.0.4"
+    "svg-parser": "^2.0.4",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "vitest": "^1.6.0"
