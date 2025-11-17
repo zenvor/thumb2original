@@ -231,6 +231,18 @@ export const scraperConfig = {
     cleanupTempOnStart: true,
     maxHoldBuffers: 0,
   },
+
+  /**
+   * 数据库配置（用于图片分析结果持久化存储）
+   */
+  database: {
+    enabled: false,                     // 是否启用数据库存储（默认关闭）
+    path: './data/analysis.db',         // 数据库文件路径
+    enableWAL: true,                    // 启用 WAL 模式（提高并发性能）
+    retentionHours: 24,                 // 数据保留时间（小时）
+    autoCleanup: true,                  // 自动清理过期数据
+    cleanupInterval: 3600000,           // 清理间隔（毫秒，默认1小时）
+  },
 }
 
 // 测试与开发者指南：
