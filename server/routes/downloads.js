@@ -33,8 +33,10 @@ export function createDownloadsRouter(downloadService) {
       const result = await downloadService.downloadSingle(extractionId, imageId)
 
       // 设置响应头
-      ctx.set('Content-Type', result.contentType)
-      ctx.set('Content-Disposition', `attachment; filename="${result.filename}"`)
+      ctx.type = result.contentType
+      ctx.set('Content-Length', result.buffer.length)
+      ctx.set('Content-Disposition', `attachment; filename="${encodeURIComponent(result.filename)}"`)
+      ctx.set('Cache-Control', 'no-cache')
 
       ctx.body = result.buffer
 
@@ -83,8 +85,10 @@ export function createDownloadsRouter(downloadService) {
       const result = await downloadService.downloadMultiple(extractionId, imageIds)
 
       // 设置响应头
-      ctx.set('Content-Type', result.contentType)
-      ctx.set('Content-Disposition', `attachment; filename="${result.filename}"`)
+      ctx.type = result.contentType
+      ctx.set('Content-Length', result.buffer.length)
+      ctx.set('Content-Disposition', `attachment; filename="${encodeURIComponent(result.filename)}"`)
+      ctx.set('Cache-Control', 'no-cache')
 
       ctx.body = result.buffer
 

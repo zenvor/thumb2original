@@ -55,6 +55,7 @@ export function createApp() {
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    exposeHeaders: ['Content-Disposition', 'Content-Length', 'Content-Type'], // 允许前端读取这些响应头
     maxAge: 86400
   }))
 
