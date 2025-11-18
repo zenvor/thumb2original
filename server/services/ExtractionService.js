@@ -424,11 +424,16 @@ export class ExtractionService {
       throw new Error('Task is not completed yet')
     }
 
-    if (!task.images_all || task.images_all.length === 0) {
+    // 从数据库读取 'all' 模式的图片
+    const { getDatabase } = await import('../../lib/database/ImageAnalysisDB.js')
+    const db = getDatabase()
+    const allModeImages = db.getImagesByMode(taskId, 'all', false)
+
+    if (!allModeImages || allModeImages.length === 0) {
       throw new Error('No images found in task')
     }
 
-    logger.info(`[${taskId}] 🔄 Starting original image matching...`)
+    logger.info(`[${taskId}] 🔄 Starting original image matching for ${allModeImages.length} images...`)
 
     // 更新匹配状态为处理中
     await this.updateTaskStatus(taskId, task.status, {
@@ -440,7 +445,7 @@ export class ExtractionService {
       const { convertThumbnailToOriginalUrl } = await import('../utils/imageUrlConverter.js')
 
       // 转换 URL
-      const originalUrls = task.images_all
+      const originalUrls = allModeImages
         .map(img => {
           const originalUrl = convertThumbnailToOriginalUrl(img.url)
           return originalUrl || img.url  // 转换失败则使用原 URL
