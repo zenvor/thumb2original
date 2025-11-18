@@ -199,11 +199,21 @@ export class ExtractionService {
         // 不依赖 fromDatabase 标记，因为该模式下所有图片都存储在数据库中
         if (entries.length > 0 && result?.getImagesWithBuffers) {
           try {
-            logger.info(`[${taskId}] 🗄️ Fetching images with buffers from database...`)
+            logger.info(`[${taskId}] 🗄️ Fetching images with buffers from database (db taskId: ${result.taskId})...`)
             const imagesFromDb = await result.getImagesWithBuffers()
+
+            logger.info(`[${taskId}] 📊 Database query result: ${imagesFromDb ? imagesFromDb.length : 'null'} images, expected: ${entries.length}`)
 
             if (imagesFromDb && imagesFromDb.length > 0) {
               logger.info(`[${taskId}] 📦 Retrieved ${imagesFromDb.length} images from database`)
+
+              // 验证 buffer 字段存在
+              const imagesWithoutBuffer = imagesFromDb.filter(img => !img.buffer)
+              if (imagesWithoutBuffer.length > 0) {
+                logger.error(`[${taskId}] ❌ ${imagesWithoutBuffer.length} images missing buffer in database:`,
+                  imagesWithoutBuffer.slice(0, 3).map(img => img.url))
+                throw new Error(`Database images missing buffer: ${imagesWithoutBuffer.length} out of ${imagesFromDb.length}`)
+              }
 
               // 将数据库格式转换为 formatImages 期望的格式
               entries = imagesFromDb.map(img => ({
@@ -223,11 +233,23 @@ export class ExtractionService {
 
               logger.info(`[${taskId}] ✅ Converted ${entries.length} database entries to analysis format`)
             } else {
-              logger.warn(`[${taskId}] ⚠️ Database returned empty results, will use entries without buffers`)
+              // 如果数据库返回空结果但 entries 不为空，说明有严重问题
+              if (entries.length > 0) {
+                logger.error(`[${taskId}] ❌ Critical: Database returned empty but ${entries.length} entries expected`)
+                logger.error(`[${taskId}] 📊 Debug info:`, {
+                  hasGetImagesWithBuffers: !!result?.getImagesWithBuffers,
+                  dbTaskId: result.taskId,
+                  entriesCount: entries.length,
+                  firstEntryUrl: entries[0]?.url
+                })
+                throw new Error(`Failed to retrieve images from database: expected ${entries.length} images but got ${imagesFromDb ? imagesFromDb.length : 0}`)
+              }
+              logger.warn(`[${taskId}] ⚠️ Database returned empty results (no images to process)`)
             }
           } catch (dbError) {
             logger.error(`[${taskId}] ❌ Failed to fetch images from database:`, toLogMeta(dbError))
-            logger.warn(`[${taskId}] ⚠️ Continuing with entries without buffers (download功能将不可用)`)
+            // 在 advanced 模式下，如果无法获取 buffer，应该失败而不是继续
+            throw new Error(`Cannot download images: database fetch failed - ${dbError.message}`)
           }
         }
 
