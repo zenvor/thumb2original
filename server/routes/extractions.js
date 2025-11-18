@@ -14,7 +14,7 @@ export function createExtractionsRouter(extractionService, storage) {
    */
   router.post('/', async (ctx) => {
     try {
-      const { url, mode, ignoreInlineImages } = ctx.request.body
+      const { url, mode, ignoreInlineImages, imageMode } = ctx.request.body
 
       // 验证参数
       if (!url) {
@@ -39,10 +39,18 @@ export function createExtractionsRouter(extractionService, storage) {
         return
       }
 
+      // 验证 imageMode
+      if (imageMode && !['all', 'originals_only'].includes(imageMode)) {
+        ctx.status = 400
+        ctx.body = { error: 'imageMode must be "all" or "originals_only"' }
+        return
+      }
+
       // 创建提取任务
       const task = await extractionService.createExtraction(url, {
         mode: mode || 'basic',
         ignoreInlineImages: ignoreInlineImages || false,
+        imageMode: imageMode || 'all',
         trigger: 'api'
       })
 
