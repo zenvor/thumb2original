@@ -253,6 +253,11 @@ export class ExtractionService {
       await this.updateTaskStatus(taskId, 'done', {
         images,
         images_count: images.length,
+        images_all: images,  // 保存 all 模式的图片
+        images_all_count: images.length,
+        images_original: null,  // 原图模式初始为 null
+        images_original_count: 0,
+        original_matched: false,  // 标记未匹配原图
         message: null
       })
 
@@ -408,5 +413,157 @@ export class ExtractionService {
   async generateHash(url) {
     const crypto = await import('crypto')
     return crypto.createHash('sha1').update(url).digest('hex')
+  }
+
+  /**
+   * 匹配原图 - 对已有任务的图片 URL 进行转换并分析
+   */
+  async matchOriginalImages(taskId) {
+    const task = await this.storage.get(taskId)
+    if (!task) {
+      throw new Error('Task not found')
+    }
+
+    if (task.status !== 'done') {
+      throw new Error('Task is not completed yet')
+    }
+
+    if (!task.images_all || task.images_all.length === 0) {
+      throw new Error('No images found in task')
+    }
+
+    logger.info(`[${taskId}] 🔄 Starting original image matching...`)
+
+    // 更新匹配状态为处理中
+    await this.updateTaskStatus(taskId, task.status, {
+      original_match_status: 'processing'
+    })
+
+    try {
+      // 导入 URL 转换工具
+      const { convertThumbnailToOriginalUrl } = await import('../utils/imageUrlConverter.js')
+
+      // 转换 URL
+      const originalUrls = task.images_all
+        .map(img => {
+          const originalUrl = convertThumbnailToOriginalUrl(img.url)
+          return originalUrl || img.url  // 转换失败则使用原 URL
+        })
+        .filter(Boolean)
+
+      logger.info(`[${taskId}] 📝 Converted ${originalUrls.length} URLs to original format`)
+
+      // 如果是 advanced 模式，需要重新分析图片
+      if (task.options.mode === 'advanced') {
+        // 启动浏览器用于下载
+        const { launchBrowser } = await import('../../lib/browserLauncher.js')
+        const config = await this.buildConfig(task)
+        const launched = await launchBrowser(config)
+        const browser = launched.browser
+        const stopMonitoring = launched.stopMonitoring
+
+        try {
+          const downloadedImages = []
+          const context = {
+            browser,
+            url: task.url,
+            config: {
+              ...config,
+              analysis: {
+                ...config.analysis,
+                mode: 'twoPhaseApi'
+              }
+            }
+          }
+
+          // 分析图片
+          const result = await processDownloadQueue(
+            originalUrls,
+            null,
+            context,
+            downloadedImages
+          )
+
+          let entries = result?.tempFiles || result?.validEntries || []
+
+          // 从数据库获取图片数据
+          if (entries.length > 0 && result?.getImagesWithBuffers) {
+            const imagesFromDb = await result.getImagesWithBuffers()
+            if (imagesFromDb && imagesFromDb.length > 0) {
+              entries = imagesFromDb.map(img => ({
+                url: img.url,
+                headers: img.headers,
+                analysisResult: {
+                  buffer: img.buffer,
+                  metadata: {
+                    format: img.format,
+                    width: img.width,
+                    height: img.height,
+                    size: img.size
+                  }
+                },
+                sequenceNumber: img.sequence_number
+              }))
+            }
+          }
+
+          // 格式化图片
+          const originalImages = this.formatImages(entries, taskId)
+
+          logger.info(`[${taskId}] ✅ Matched ${originalImages.length} original images`)
+
+          // 更新任务
+          await this.updateTaskStatus(taskId, 'done', {
+            images_original: originalImages,
+            images_original_count: originalImages.length,
+            original_matched: true,
+            original_match_status: 'done',
+            images: originalImages,  // 切换到显示原图
+            images_count: originalImages.length
+          })
+
+          return {
+            success: true,
+            matched_count: originalImages.length,
+            images: originalImages
+          }
+
+        } finally {
+          if (stopMonitoring) stopMonitoring()
+          if (browser) await browser.close()
+        }
+
+      } else {
+        // basic 模式，只返回 URL
+        const originalImages = originalUrls.map(url => ({
+          id: this.generateId(),
+          url: url
+        }))
+
+        await this.updateTaskStatus(taskId, 'done', {
+          images_original: originalImages,
+          images_original_count: originalImages.length,
+          original_matched: true,
+          original_match_status: 'done',
+          images: originalImages,
+          images_count: originalImages.length
+        })
+
+        return {
+          success: true,
+          matched_count: originalImages.length,
+          images: originalImages
+        }
+      }
+
+    } catch (error) {
+      logger.error(`[${taskId}] ❌ Original matching failed:`, error)
+
+      await this.updateTaskStatus(taskId, task.status, {
+        original_match_status: 'failed'
+      })
+
+      throw error
+    }
   }
 }
