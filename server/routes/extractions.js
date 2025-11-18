@@ -4,9 +4,11 @@
 
 import Router from '@koa/router'
 import { logger } from '../../utils/logger.js'
+import { getDatabase } from '../../lib/database/ImageAnalysisDB.js'
 
 export function createExtractionsRouter(extractionService, storage) {
   const router = new Router({ prefix: '/api/extractions' })
+  const db = getDatabase()
 
   /**
    * POST /api/extractions
@@ -82,28 +84,39 @@ export function createExtractionsRouter(extractionService, storage) {
         return
       }
 
-      // 根据 view 参数切换显示的图片
-      if (view === 'original') {
-        if (task.original_matched && task.images_original) {
-          ctx.body = {
-            ...task,
-            images: task.images_original,
-            images_count: task.images_original_count,
-            current_view: 'original'
-          }
-        } else {
+      // 根据 view 参数从数据库查询对应的图片
+      if (view === 'original' || view === 'all') {
+        const imageMode = view === 'original' ? 'original' : 'all'
+
+        // 从数据库获取对应模式的图片
+        const imagesFromDb = db.getImagesByMode(id, imageMode, true)
+
+        if (imagesFromDb.length === 0 && view === 'original') {
           ctx.status = 400
           ctx.body = { error: 'Original images not matched yet' }
+          return
         }
-      } else if (view === 'all') {
+
+        // 格式化为 API 响应格式
+        const images = imagesFromDb.map(img => ({
+          id: img.id,
+          url: img.url,
+          name: extractFileName(img.url),
+          basename: extractFileName(img.url) ? `${extractFileName(img.url)}.${img.format}` : undefined,
+          size: img.width && img.height ? img.width * img.height : 0,
+          type: img.format,
+          width: img.width,
+          height: img.height
+        }))
+
         ctx.body = {
           ...task,
-          images: task.images_all || task.images,
-          images_count: task.images_all_count || task.images_count,
-          current_view: 'all'
+          images,
+          images_count: images.length,
+          current_view: view
         }
       } else {
-        // 默认返回当前视图
+        // 默认返回当前视图（从内存存储）
         ctx.body = task
       }
     } catch (error) {
@@ -112,6 +125,18 @@ export function createExtractionsRouter(extractionService, storage) {
       ctx.body = { error: error.message || 'Internal server error' }
     }
   })
+
+  // 辅助函数：提取文件名
+  function extractFileName(url) {
+    try {
+      const urlObj = new URL(url)
+      const pathname = urlObj.pathname
+      const filename = pathname.split('/').pop()
+      return filename ? filename.replace(/\.[^/.]+$/, '') : null
+    } catch {
+      return null
+    }
+  }
 
   /**
    * POST /api/extractions/:id/match-original
@@ -134,13 +159,26 @@ export function createExtractionsRouter(extractionService, storage) {
         return
       }
 
-      // 如果已经匹配过，直接返回结果
+      // 如果已经匹配过，从数据库查询结果
       if (task.original_matched) {
-        logger.info(`Task ${id} already matched, returning cached results`)
+        logger.info(`Task ${id} already matched, returning cached results from database`)
+
+        const imagesFromDb = db.getImagesByMode(id, 'original', true)
+        const images = imagesFromDb.map(img => ({
+          id: img.id,
+          url: img.url,
+          name: extractFileName(img.url),
+          basename: extractFileName(img.url) ? `${extractFileName(img.url)}.${img.format}` : undefined,
+          size: img.width && img.height ? img.width * img.height : 0,
+          type: img.format,
+          width: img.width,
+          height: img.height
+        }))
+
         ctx.body = {
           success: true,
-          matched_count: task.images_original_count,
-          images: task.images_original,
+          matched_count: images.length,
+          images: images,
           from_cache: true
         }
         return
