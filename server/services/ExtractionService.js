@@ -253,10 +253,6 @@ export class ExtractionService {
       await this.updateTaskStatus(taskId, 'done', {
         images,
         images_count: images.length,
-        images_all: images,  // 保存 all 模式的图片
-        images_all_count: images.length,
-        images_original: null,  // 原图模式初始为 null
-        images_original_count: 0,
         original_matched: false,  // 标记未匹配原图
         message: null
       })
@@ -467,6 +463,7 @@ export class ExtractionService {
           const context = {
             browser,
             url: task.url,
+            imageMode: 'original',  // 标记为原图模式
             config: {
               ...config,
               analysis: {
@@ -512,14 +509,10 @@ export class ExtractionService {
 
           logger.info(`[${taskId}] ✅ Matched ${originalImages.length} original images`)
 
-          // 更新任务
+          // 更新任务状态（图片已存储在数据库中）
           await this.updateTaskStatus(taskId, 'done', {
-            images_original: originalImages,
-            images_original_count: originalImages.length,
             original_matched: true,
-            original_match_status: 'done',
-            images: originalImages,  // 切换到显示原图
-            images_count: originalImages.length
+            original_match_status: 'done'
           })
 
           return {
@@ -534,20 +527,18 @@ export class ExtractionService {
         }
 
       } else {
-        // basic 模式，只返回 URL
+        // basic 模式，只返回 URL（不需要分析和保存）
         const originalImages = originalUrls.map(url => ({
           id: this.generateId(),
           url: url
         }))
 
         await this.updateTaskStatus(taskId, 'done', {
-          images_original: originalImages,
-          images_original_count: originalImages.length,
           original_matched: true,
-          original_match_status: 'done',
-          images: originalImages,
-          images_count: originalImages.length
+          original_match_status: 'done'
         })
+
+        logger.info(`[${taskId}] ✅ Basic mode: matched ${originalImages.length} original URLs`)
 
         return {
           success: true,
