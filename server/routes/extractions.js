@@ -68,8 +68,56 @@ export function createExtractionsRouter(extractionService, storage) {
   /**
    * GET /api/extractions/:id
    * 查询任务状态和图片列表
+   * 支持 ?view=all|original 参数切换视图
    */
   router.get('/:id', async (ctx) => {
+    try {
+      const { id } = ctx.params
+      const { view } = ctx.query
+
+      const task = await storage.get(id)
+      if (!task) {
+        ctx.status = 404
+        ctx.body = { error: 'Task not found' }
+        return
+      }
+
+      // 根据 view 参数切换显示的图片
+      if (view === 'original') {
+        if (task.original_matched && task.images_original) {
+          ctx.body = {
+            ...task,
+            images: task.images_original,
+            images_count: task.images_original_count,
+            current_view: 'original'
+          }
+        } else {
+          ctx.status = 400
+          ctx.body = { error: 'Original images not matched yet' }
+        }
+      } else if (view === 'all') {
+        ctx.body = {
+          ...task,
+          images: task.images_all || task.images,
+          images_count: task.images_all_count || task.images_count,
+          current_view: 'all'
+        }
+      } else {
+        // 默认返回当前视图
+        ctx.body = task
+      }
+    } catch (error) {
+      logger.error('Error getting extraction:', error)
+      ctx.status = 500
+      ctx.body = { error: error.message || 'Internal server error' }
+    }
+  })
+
+  /**
+   * POST /api/extractions/:id/match-original
+   * 匹配原图 - 对已有任务的图片进行原图转换和分析
+   */
+  router.post('/:id/match-original', async (ctx) => {
     try {
       const { id } = ctx.params
 
@@ -80,9 +128,32 @@ export function createExtractionsRouter(extractionService, storage) {
         return
       }
 
-      ctx.body = task
+      if (task.status !== 'done') {
+        ctx.status = 400
+        ctx.body = { error: 'Task is not completed yet' }
+        return
+      }
+
+      // 如果已经匹配过，直接返回结果
+      if (task.original_matched) {
+        logger.info(`Task ${id} already matched, returning cached results`)
+        ctx.body = {
+          success: true,
+          matched_count: task.images_original_count,
+          images: task.images_original,
+          from_cache: true
+        }
+        return
+      }
+
+      logger.info(`Starting original matching for task: ${id}`)
+
+      // 执行匹配
+      const result = await extractionService.matchOriginalImages(id)
+
+      ctx.body = result
     } catch (error) {
-      logger.error('Error getting extraction:', error)
+      logger.error('Error matching original images:', error)
       ctx.status = 500
       ctx.body = { error: error.message || 'Internal server error' }
     }
